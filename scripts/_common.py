@@ -23,6 +23,41 @@ from gtsrb.utils.logging import get_logger
 log = get_logger()
 
 
+# Giá trị cột `tag` của một run CHÍNH trong các bảng CSV.
+#
+# LỖI SUÝT GẶP: để cột này TRỐNG thì file CSV thô gây hiểu sai. Trong
+# main_comparison.csv, dòng của thí nghiệm rò rỉ (`leak-A_random`) có macro-F1
+# 0,98209 — xếp TRÊN MobileNetV2 — mà chỉ phân biệt với model thật bằng một ô
+# trống. Ai mở CSV rồi sort theo macro-F1 sẽ coi nó là model xếp thứ tư.
+TAG_CHINH = "(chính)"
+
+# Giá trị được coi là "không phải thí nghiệm". Nhận cả ô trống để còn đọc được
+# các bảng đã sinh TRƯỚC khi có TAG_CHINH.
+_TAG_RONG = ("", TAG_CHINH, "nan", "None")
+
+
+def chi_run_chinh(frame, cot: str = "tag"):
+    """Giữ CHỈ các dòng của run chính trong một bảng đã đọc từ CSV.
+
+    Ba script (evaluate, make_report, make_baocao) đều cần ĐÚNG phép lọc này.
+    Trước đây mỗi script tự viết lại biểu thức, nên chúng phải trùng nhau mà
+    không có gì bắt buộc — sửa một chỗ là hai chỗ kia lặng lẽ sai, và hậu quả
+    là một run ablation hoặc run rò rỉ lọt vào bảng so sánh chính của báo cáo.
+    """
+    if cot not in frame.columns:
+        return frame
+    tag = frame[cot]
+    return frame[tag.isna() | tag.astype(str).isin(_TAG_RONG)]
+
+
+def chi_run_phu(frame, cot: str = "tag"):
+    """Ngược lại: CHỈ run ablation / seed / thí nghiệm. Dùng cho bảng ablation."""
+    if cot not in frame.columns:
+        return frame.iloc[0:0]
+    tag = frame[cot]
+    return frame[tag.notna() & ~tag.astype(str).isin(_TAG_RONG)]
+
+
 def find_run_dirs(patterns: list[str], main_only: bool = False) -> list[Path]:
     """Mở rộng các glob thành danh sách thư mục run ĐÃ TRAIN XONG.
 

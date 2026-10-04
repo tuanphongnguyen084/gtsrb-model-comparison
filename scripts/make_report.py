@@ -20,6 +20,8 @@ from __future__ import annotations
 
 import _bootstrap  # noqa: F401
 
+from _common import chi_run_chinh, chi_run_phu
+
 import argparse
 import glob
 import json
@@ -91,7 +93,7 @@ def table_ablation() -> str:
     if not path.exists():
         return CHUA_CO + "  \nChạy: `python scripts/run_ablation.py --axes all` rồi `--collect-only`"
     frame = pd.read_csv(path)
-    frame = frame[frame["tag"].notna() & (frame["tag"] != "")]
+    frame = chi_run_phu(frame)
     if frame.empty:
         return CHUA_CO
     frame["trục"] = frame["tag"].astype(str).str.split("-").str[0]
@@ -222,8 +224,7 @@ def section_recommendation() -> str:
     # Không lọc thì một biến thể ablation (ví dụ M2 width x2) có thể có macro-F1
     # cao nhất và bị chọn làm khuyến nghị triển khai — trong khi nó không phải
     # một trong các model mà nhóm thực sự so sánh.
-    if "tag" in main.columns:
-        main = main[main["tag"].isna() | (main["tag"].astype(str) == "")]
+    main = chi_run_chinh(main)
     if main.empty:
         return MISSING + "  \nKhông có run CHÍNH nào (mọi run đều có tag)."
 

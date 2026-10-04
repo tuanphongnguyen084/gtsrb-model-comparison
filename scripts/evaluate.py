@@ -31,7 +31,8 @@ from pathlib import Path
 import pandas as pd
 import torch
 
-from _common import (find_run_dirs, free_memory, load_run, make_test_loader,
+from _common import (TAG_CHINH, find_run_dirs, free_memory, load_run,
+                     make_test_loader,
                      read_result, write_result)
 from gtsrb.eval.calibration import expected_calibration_error, plot_reliability
 from gtsrb.eval.confusion import confusion, plot_confusion, top_confusions
@@ -144,7 +145,7 @@ def row_for_table(run_dir: Path, evaluated: dict, result: dict) -> dict:
         # Cột này để make_report.py lọc: bảng so sánh chính và khuyến nghị triển
         # khai chỉ được xét run chính, nếu không thì một biến thể ablation có thể
         # lọt vào và bị chọn làm "model tốt nhất".
-        "tag": result.get("notes", ""),
+        "tag": result.get("notes", "") or TAG_CHINH,
         "img_size": cfg.data.img_size,
         "preprocess": cfg.data.preprocess,
         "aug_policy": cfg.data.aug_policy,

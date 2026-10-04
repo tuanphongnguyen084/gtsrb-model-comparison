@@ -19,6 +19,8 @@ from __future__ import annotations
 
 import _bootstrap  # noqa: F401
 
+from _common import chi_run_chinh
+
 import argparse
 from datetime import datetime
 from pathlib import Path
@@ -50,8 +52,7 @@ def read_main() -> pd.DataFrame | None:
     frame = read("main_comparison.csv")
     if frame is None:
         return None
-    if "tag" in frame.columns:
-        frame = frame[frame["tag"].isna() | (frame["tag"].astype(str) == "")]
+    frame = chi_run_chinh(frame)
     return frame if not frame.empty else None
 
 
