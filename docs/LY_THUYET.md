@@ -482,8 +482,18 @@ F1_k = 2 · P_k · R_k / (P_k + R_k)        macro-F1 = (1/K) Σ_k F1_k
 ```
 Điểm then chốt: `(1/K) Σ` — **mỗi lớp một phiếu bằng nhau**, bất kể lớp đó có 210 hay 2.250 ảnh.
 
-So sánh: nếu model bỏ hẳn một lớp 210 ảnh (0,54% dữ liệu) thì accuracy chỉ giảm ~0,54 điểm
-(gần như không thấy), nhưng macro-F1 mất `1/43 ≈ 2,3` điểm (thấy rõ).
+So sánh bằng số thật. Lớp 0 là lớp nhỏ nhất: **210 ảnh train**, **60 ảnh test**. Giả sử
+model đoán sai TOÀN BỘ lớp này:
+
+| | công thức | mất bao nhiêu |
+|---|---|---|
+| accuracy | 60 / 12.630 | **0,48 điểm** — gần như không thấy |
+| macro-F1 | 1 / 43 | **2,33 điểm** — thấy rõ |
+
+Chênh **4,9 lần**. Chú ý mẫu số: accuracy chia cho **số ảnh test** (nên lớp nhỏ gần như
+không ảnh hưởng), còn macro-F1 chia cho **số lớp** (nên mọi lớp nặng như nhau, dù 60 ảnh
+hay 750 ảnh). Đừng lấy tỉ lệ 210/39.209 = 0,54% của tập **train** làm mức giảm accuracy
+trên tập **test** — hai mẫu số khác nhau.
 Trong bài biển báo, nhận sai một biển hiếm có thể nguy hiểm hơn nhận sai một biển phổ biến.
 
 (Phân biệt: **micro**-F1 gộp hết TP/FP/FN rồi mới tính → trong bài đa lớp đơn nhãn nó

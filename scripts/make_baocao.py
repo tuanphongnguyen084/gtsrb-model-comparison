@@ -123,6 +123,88 @@ def table_robustness() -> str:
     return MISSING if frame is None else frame.round(4).to_markdown()
 
 
+# Nhiễu SO SÁNH ĐƯỢC giữa hai nhóm độ phân giải (48x48 cho M1/M2, 224x224 cho M3).
+# motion_blur và fog dùng kernel/khoảng cách tính bằng PIXEL TUYỆT ĐỐI, nên cùng một
+# "mức 5" là 31% chiều rộng ảnh 48px nhưng chỉ 6,7% ảnh 224px — không so được.
+# Chi tiết ở docs/SU_CO.md §8.
+NHIEU_SO_SANH_DUOC = ("gauss_noise", "low_light", "occlusion")
+
+
+def ket_luan_robustness() -> str:
+    """Sinh câu kết luận về độ bền TỪ SỐ ĐO, không viết cứng.
+
+    Câu này là kết luận số 3 của cả báo cáo. Trước đây nó được viết cứng
+    ("M1 yếu nhất về accuracy nhưng có mCE tốt nhất") từ hồi chỉ đo 3 model.
+    Thêm model vào là câu đó có thể thành SAI, mà bảng ngay bên dưới thì vẫn
+    đúng — báo cáo tự phản bác chính mình và không có gì báo động.
+    """
+    frame = read("robustness.csv")
+    if frame is None:
+        return MISSING
+
+    sach = (frame[frame["corruption"] == "clean"]
+            .set_index("model")["top1"])
+    # mCE chỉ trên nhóm nhiễu so sánh được: error trung bình qua mọi mức độ.
+    nhieu = frame[frame["corruption"].isin(NHIEU_SO_SANH_DUOC)]
+    if nhieu.empty or sach.empty:
+        return MISSING
+    mce = (1 - nhieu.groupby("model")["top1"].mean()).sort_values()
+
+    gioi_nhat, ben_nhat, yeu_nhat = sach.idxmax(), mce.idxmin(), sach.idxmin()
+    dong = [f"Trên {len(sach)} mô hình, xét **{len(NHIEU_SO_SANH_DUOC)} loại nhiễu so sánh "
+            f"được** ({', '.join(f'`{n}`' for n in NHIEU_SO_SANH_DUOC)}):"]
+
+    if gioi_nhat != ben_nhat:
+        dong.append(
+            f"\n**Mô hình chính xác nhất trên ảnh sạch KHÔNG phải mô hình bền nhất.** "
+            f"`{gioi_nhat}` dẫn đầu khi ảnh sạch (top-1 = {sach[gioi_nhat]:.4f}) "
+            f"nhưng `{ben_nhat}` mới là mô hình bền nhất "
+            f"(error trung bình dưới nhiễu = {mce[ben_nhat]:.4f} so với "
+            f"{mce[gioi_nhat]:.4f}).")
+    else:
+        dong.append(
+            f"\n**Mô hình chính xác nhất cũng là mô hình bền nhất:** `{gioi_nhat}` "
+            f"đứng đầu cả trên ảnh sạch (top-1 = {sach[gioi_nhat]:.4f}) và dưới nhiễu "
+            f"(error trung bình = {mce[gioi_nhat]:.4f}). Trên nhóm mô hình này, độ bền "
+            f"KHÔNG tách khỏi accuracy — khác với kết quả khi chỉ đo 3 mô hình đầu.")
+
+    if yeu_nhat == ben_nhat:
+        dong.append(
+            f"\nĐáng chú ý hơn: `{yeu_nhat}` — **yếu nhất** trên ảnh sạch "
+            f"(top-1 = {sach[yeu_nhat]:.4f}) — lại bền nhất. Thứ tự xếp hạng khi có "
+            f"nhiễu **đảo lại** so với khi không có.")
+
+    dong.append("\nXếp hạng độ bền (error trung bình dưới nhiễu, càng THẤP càng bền): "
+                + " < ".join(f"`{m}` {v:.4f}" for m, v in mce.items()) + ".")
+    return "\n".join(dong)
+
+
+def ket_luan_robustness_ngan() -> str:
+    """Một dòng cho mục 'kết quả chính' ở đầu và cuối báo cáo.
+
+    Rút từ cùng số liệu với ket_luan_robustness() để hai chỗ KHÔNG BAO GIỜ
+    nói ngược nhau — trước đây cả hai đều viết cứng ở ba vị trí khác nhau.
+    """
+    frame = read("robustness.csv")
+    if frame is None:
+        return "Độ bền dưới nhiễu (chưa có số đo)"
+    sach = frame[frame["corruption"] == "clean"].set_index("model")["top1"]
+    nhieu = frame[frame["corruption"].isin(NHIEU_SO_SANH_DUOC)]
+    if sach.empty or nhieu.empty:
+        return "Độ bền dưới nhiễu (chưa có số đo)"
+    mce = 1 - nhieu.groupby("model")["top1"].mean()
+    gioi, ben, yeu = sach.idxmax(), mce.idxmin(), sach.idxmin()
+
+    if gioi != ben and yeu == ben:
+        return ("Mô hình có **accuracy sạch cao nhất lại kém bền nhất** trước nhiễu, "
+                f"còn `{yeu}` — yếu nhất khi ảnh sạch — bền nhất")
+    if gioi != ben:
+        return (f"**Accuracy sạch không dự đoán được độ bền:** `{gioi}` đứng đầu khi "
+                f"ảnh sạch nhưng `{ben}` mới bền nhất dưới nhiễu")
+    return (f"**Độ bền đi cùng accuracy trên nhóm mô hình này:** `{gioi}` đứng đầu cả "
+            "trên ảnh sạch và dưới nhiễu")
+
+
 def table_worst_classes(n: int = 8) -> str:
     """Lớp yếu nhất của mô hình tốt nhất."""
     main = read_main()
@@ -213,7 +295,7 @@ thì nên chọn mô hình nào.
    thống kê (p < 1e-6), trong khi nhanh hơn 13–68 lần.
 2. **Latency không tỉ lệ với FLOPs**, chênh tới **64 lần** về hiệu quả trên mỗi GFLOP.
    Mô hình tên "EfficientNet" lại là mô hình **chậm nhất** trong cả {f['n_models']}.
-3. Mô hình có **accuracy sạch cao nhất lại kém bền nhất** trước nhiễu thực tế.
+3. {ket_luan_robustness_ngan()} trước nhiễu thực tế.
 
 ---
 
@@ -382,8 +464,7 @@ Bảng `relative robustness` = accuracy dưới nhiễu / accuracy trên ảnh s
 
 {table_robustness()}
 
-**Kết quả chính: mô hình có accuracy sạch cao nhất lại KHÔNG phải mô hình bền nhất.**
-M1 — yếu nhất về accuracy — có mCE tốt nhất.
+{ket_luan_robustness()}
 
 ⚠️ **Giới hạn phương pháp cần nêu rõ:** nhiễu được áp **sau khi** resize, mà M1/M2 chạy ở
 48×48 còn M3 ở 224×224. Kernel motion blur mức 5 là **15 pixel tuyệt đối**: ở 48×48 nó phủ
@@ -470,8 +551,8 @@ của báo cáo này nằm ở ba kết luận chỉ rút ra được khi **đo 
    pretrained phát huy.
 2. **Latency chênh 64 lần so với dự đoán từ FLOPs.** Chọn mô hình theo FLOPs sẽ chọn đúng
    mô hình chậm nhất.
-3. **Mô hình chính xác nhất không phải mô hình bền nhất**, và cũng không phải mô hình nên
-   triển khai.
+3. {ket_luan_robustness_ngan()} — và mô hình chính xác nhất cũng không phải mô hình
+   nên triển khai.
 
 Điểm chung của cả ba: chúng chỉ lộ ra khi **không tin vào con số đầu tiên nhìn thấy**.
 

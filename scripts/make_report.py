@@ -155,9 +155,12 @@ NOTE_MAIN_TABLE = """**Cách đọc bảng — ba điều phải nói khi trình
    lớp, top-5 nghĩa là "đúng trong 11,6% số lớp" — mọi model tử tế đều ~99,9%. Chỉ số
    **bão hoà** thì không phân biệt được gì. Nhóm báo cáo vì đề bài yêu cầu, nhưng
    **kết luận dựa trên top-1 và macro-F1**.
-2. **Macro-F1 là chỉ số chính**, vì nó cho mỗi lớp trọng số bằng nhau (dữ liệu mất cân
-   bằng 10,7:1). Bỏ hẳn một lớp 210 ảnh chỉ làm accuracy giảm ~0,54 điểm nhưng macro-F1
-   mất ~2,3 điểm.
+2. **Macro-F1 là chỉ số chính**, vì nó cho mỗi lớp trọng số bằng nhau (train mất cân
+   bằng 10,7:1 — lớp 0 có 210 ảnh, lớp 2 có 2.250). Lớp 0 cũng là lớp nhỏ nhất trên
+   test với **60 ảnh**: đoán sai TOÀN BỘ lớp này chỉ làm accuracy giảm
+   **0,48 điểm** (60/12.630) nhưng macro-F1 mất **2,33 điểm** (1/43, không phụ thuộc
+   lớp to hay nhỏ) — gấp **4,9 lần**. Accuracy che được lỗi ở lớp thiểu số; macro-F1
+   thì không.
 3. **Chênh lệch trong bảng chưa chắc có ý nghĩa** — xem mục 2. Trên 12.630 ảnh,
    0,2 điểm top-1 chỉ là ~25 ảnh."""
 
