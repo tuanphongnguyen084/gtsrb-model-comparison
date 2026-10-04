@@ -229,17 +229,39 @@ def plan_jobs(args: argparse.Namespace) -> list[dict]:
     return jobs
 
 
+def already_done(job: dict) -> Path | None:
+    """Trả thư mục run nếu job này ĐÃ chạy xong trước đó, None nếu chưa.
+
+    ★ Quan trọng với mẻ 30 job chạy 5 giờ: nếu máy ngủ hoặc job bị kill giữa chừng,
+    chạy lại đúng lệnh cũ sẽ làm tiếp từ chỗ dở thay vì bắt đầu lại từ đầu.
+    Nhận diện bằng tag `<trục>-<giá trị>` nằm trong tên run, và có result.json
+    (có result.json = fit() đã chạy xong).
+    """
+    marker = f"{job['axis']}-{job['tag']}"
+    for run_dir in sorted(Path("artifacts/runs").glob(f"*{marker}*")):
+        if (run_dir / "result.json").exists():
+            return run_dir
+    return None
+
+
 def execute_jobs(jobs: list[dict], args: argparse.Namespace) -> list[dict]:
     """Chạy từng job bằng subprocess. Job lỗi được ghi lại và BỎ QUA, không dừng cả mẻ.
 
     Vì sao không dừng: một mẻ 30 job chạy 5 giờ, nếu job thứ 3 lỗi mà dừng hết thì
     mất cả buổi. Ghi lại và chạy tiếp, cuối cùng báo danh sách thất bại.
+
+    Job đã chạy xong trước đó thì BỎ QUA (xem already_done).
     """
     failures = []
     for i, job in enumerate(jobs, 1):
         log.info("")
         log.info("=" * 68)
         log.info("[%d/%d] trục=%s  tag=%s", i, len(jobs), job["axis"], job["tag"])
+
+        done = already_done(job)
+        if done is not None:
+            log.info("  BỎ QUA — đã chạy xong: %s", done.name)
+            continue
 
         if job["needs_cache"]:
             ensure_cache(*job["needs_cache"])

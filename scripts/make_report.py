@@ -214,6 +214,16 @@ def section_recommendation() -> str:
         return CHUA_CO + "  \nChạy: `make eval`"
 
     main = pd.read_csv(main_path)
+
+    # ★ CHỈ xét run CHÍNH. Run ablation/seed có tag -> loại bỏ.
+    # Không lọc thì một biến thể ablation (ví dụ M2 width x2) có thể có macro-F1
+    # cao nhất và bị chọn làm khuyến nghị triển khai — trong khi nó không phải
+    # một trong các model mà nhóm thực sự so sánh.
+    if "tag" in main.columns:
+        main = main[main["tag"].isna() | (main["tag"].astype(str) == "")]
+    if main.empty:
+        return MISSING + "  \nKhông có run CHÍNH nào (mọi run đều có tag)."
+
     best = main.loc[main["test_macro_f1"].idxmax()]
     best_model = best["model"]
 

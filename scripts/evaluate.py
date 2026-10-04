@@ -140,6 +140,11 @@ def row_for_table(run_dir: Path, evaluated: dict, result: dict) -> dict:
     return {
         "run_id": run_dir.name,
         "model": evaluated["model_key"],
+        # tag rỗng = run CHÍNH (M1/M2/M3). tag có giá trị = run ablation hoặc seed.
+        # Cột này để make_report.py lọc: bảng so sánh chính và khuyến nghị triển
+        # khai chỉ được xét run chính, nếu không thì một biến thể ablation có thể
+        # lọt vào và bị chọn làm "model tốt nhất".
+        "tag": result.get("notes", ""),
         "img_size": cfg.data.img_size,
         "preprocess": cfg.data.preprocess,
         "aug_policy": cfg.data.aug_policy,

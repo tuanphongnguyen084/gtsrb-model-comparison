@@ -41,6 +41,20 @@ def read(name: str, **kw) -> pd.DataFrame | None:
     return pd.read_csv(path, **kw) if path.exists() else None
 
 
+def read_main() -> pd.DataFrame | None:
+    """Bảng so sánh chính, CHỈ gồm run chính (bỏ run ablation và run nhiều seed).
+
+    Run ablation/seed có cột `tag` khác rỗng. Không lọc thì bảng so sánh trong báo
+    cáo sẽ có 40+ dòng và một biến thể ablation có thể bị chọn làm model tốt nhất.
+    """
+    frame = read("main_comparison.csv")
+    if frame is None:
+        return None
+    if "tag" in frame.columns:
+        frame = frame[frame["tag"].isna() | (frame["tag"].astype(str) == "")]
+    return frame if not frame.empty else None
+
+
 def md(frame: pd.DataFrame | None, **kw) -> str:
     """DataFrame -> bảng Markdown, hoặc câu nhắc nếu chưa có dữ liệu."""
     return MISSING if frame is None or frame.empty else frame.to_markdown(index=False, **kw)
@@ -55,7 +69,7 @@ def pct(x) -> str:
 
 def table_models() -> str:
     """Bảng so sánh chính, gộp accuracy + chi phí."""
-    main, speed = read("main_comparison.csv"), read("speed.csv")
+    main, speed = read_main(), read("speed.csv")
     if main is None:
         return MISSING
     if speed is not None:
@@ -111,7 +125,7 @@ def table_robustness() -> str:
 
 def table_worst_classes(n: int = 8) -> str:
     """Lớp yếu nhất của mô hình tốt nhất."""
-    main = read("main_comparison.csv")
+    main = read_main()
     if main is None:
         return MISSING
     best = main.loc[main["test_macro_f1"].idxmax(), "model"]
@@ -125,7 +139,7 @@ def table_worst_classes(n: int = 8) -> str:
 
 def table_confusions(n: int = 6) -> str:
     """n cặp bị nhầm nhiều nhất của mô hình tốt nhất."""
-    main = read("main_comparison.csv")
+    main = read_main()
     if main is None:
         return MISSING
     best = main.loc[main["test_macro_f1"].idxmax(), "model"]
@@ -139,7 +153,7 @@ def table_confusions(n: int = 6) -> str:
 
 def facts() -> dict:
     """Vài con số dùng rải rác trong phần diễn giải, đọc từ bảng thật."""
-    main, speed = read("main_comparison.csv"), read("speed.csv")
+    main, speed = read_main(), read("speed.csv")
     out = {"best": "–", "best_f1": "–", "chosen": "–", "speedup": "–", "n_models": 0}
     if main is None:
         return out
