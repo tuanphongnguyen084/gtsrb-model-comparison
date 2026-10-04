@@ -185,7 +185,68 @@ rộng ảnh** (ví dụ 6% chiều rộng) thay vì pixel tuyệt đối, rồi
 
 ---
 
-## 9. Các lỗi KHÁC NÊN BIẾT TRƯỚC (chưa gặp nhưng gần như chắc chắn sẽ gặp)
+## 9. ★ Phép kiểm ONNX báo động SAI vì kiểm bằng `torch.randn`
+
+**Triệu chứng.** `verify_onnx()` báo EfficientNet-B0 lệch **2,70e-01** so với PyTorch,
+trong khi ba model còn lại lệch ~1e-06. Trông đúng như một model xuất lỗi.
+
+**Kiểm chứng trước khi sửa.** Chạy lại cùng phép so nhưng bằng **ảnh test thật**:
+
+| Model | input = `torch.randn` | input = ảnh test thật | dự đoán khớp |
+|---|---|---|---|
+| m1_lenet | 4e-06 | 3,8e-06 | 256/256 |
+| m2_vggres | 2e-06 | 2,3e-05 | 256/256 |
+| m3_resnet18 | 8e-07 | 1,8e-05 | 256/256 |
+| m3_effnetb0 | **2,7e-01** ✗ | **1,4e-05** ✓ | **256/256** |
+
+ONNX của EfficientNet-B0 **hoàn toàn đúng**. Lỗi nằm ở phép kiểm.
+
+**Nguyên nhân.** `torch.randn` là nhiễu Gauss chuẩn — nằm **ngoài phân phối** mà model
+được train (ảnh đã CLAHE + chuẩn hoá ImageNet). Với input lạ, mạng chạy vào vùng mà SiLU
+và khối squeeze-excite cho hoạt hoá cực lớn, nên chênh lệch dấu phẩy động ~1e-7 của từng
+phép toán bị **khuếch đại qua 82 lớp**. Mạng càng sâu, input càng lạ thì càng phóng to —
+đúng vì vậy mà **chỉ** model sâu nhất bị báo động, làm nó trông giống lỗi riêng của
+EfficientNet.
+
+**Vì sao đây là lỗi đáng ghi lại.** Một phép kiểm hay báo động sai **tệ hơn** là không có
+phép kiểm: cả nhóm sẽ học cách phớt nó đi, và lần nó báo ĐÚNG thì cũng không ai tin. Nó
+cũng dễ dẫn tới kết luận sai ngược lại — "EfficientNet không xuất ONNX được" — rồi viết
+vào báo cáo.
+
+**Cách sửa.** `verify_onnx(..., sample=<batch ảnh thật>)`, và thêm tiêu chí **thực sự
+quan trọng khi triển khai**: `argmax` có đổi không. Lệch logit 1e-3 mà lớp dự đoán không
+đổi thì model vẫn dùng được; lệch 1e-5 mà đổi lớp thì không. Không truyền `sample` thì
+hàm vẫn chạy nhưng **ghi rõ trong log là phép kiểm đang yếu**.
+
+**Bài học chung.** Mọi phép kiểm số học phải chạy trên **dữ liệu cùng phân phối với lúc
+triển khai**. Sai số dấu phẩy động không phải hằng số — nó là hàm của độ sâu mạng *và*
+của việc input có nằm trong miền đã train hay không.
+
+---
+
+## 10. int8 static VỠ trên EfficientNet-B0 vì `SiLU` không có kernel lượng tử hoá
+
+**Triệu chứng.** `quantize_static` convert xong nhưng chạy thì:
+`Could not run 'aten::silu.out' with arguments from the 'QuantizedCPU' backend`.
+
+**Nguyên nhân.** Backend lượng tử hoá CPU của PyTorch chưa có kernel int8 cho `SiLU`
+(Swish) — hàm hoạt hoá mà EfficientNet dùng ở mọi khối. ReLU thì có.
+
+**Vì sao không sập cả mẻ.** `_works()` chạy thử một forward sau khi convert và bắt được
+lỗi này, nên bảng chỉ thiếu dòng `int8_static` của EfficientNet-B0 thay vì cả script
+chết. Đây là lý do `compare_quantized()` luôn **thử chạy** model vừa nén, chứ không tin
+rằng convert thành công là dùng được. Lần đầu dựng `quantize_static` cũng vướng đúng
+kiểu đó: thiếu `QuantStub`/`DeQuantStub` nên convert chạy qua nhưng forward thì vỡ —
+sửa bằng `_QuantWrapper` trong `src/gtsrb/deploy/export.py`. Hai lần, cùng một bài học:
+**convert được ≠ chạy được**.
+
+**Kết luận cho báo cáo.** Khả năng lượng tử hoá **phụ thuộc hàm hoạt hoá**, không chỉ
+phụ thuộc kiến trúc. Chọn model cho thiết bị biên mà định dùng int8 thì phải kiểm
+backend có kernel cho mọi op trong model — chỉ đếm tham số và FLOPs là không đủ.
+
+---
+
+## 11. Các lỗi KHÁC NÊN BIẾT TRƯỚC (chưa gặp nhưng gần như chắc chắn sẽ gặp)
 
 | Triệu chứng | Nguyên nhân | Cách sửa |
 |---|---|---|

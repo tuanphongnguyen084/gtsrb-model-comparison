@@ -259,12 +259,36 @@ def export_onnx(model: nn.Module, img_size: int, out_path: str | Path,
 
 
 def verify_onnx(onnx_path: str | Path, model: nn.Module, img_size: int,
-                tolerance: float = 1e-4) -> bool:
+                tolerance: float = 1e-4, sample: "torch.Tensor | None" = None) -> bool:
     """Kiểm model ONNX cho ra ĐÚNG kết quả như model PyTorch gốc.
 
     ★ BƯỚC NÀY KHÔNG ĐƯỢC BỎ. Xuất thành công không có nghĩa là xuất đúng: một số
     phép toán bị dịch sai hoặc bị xấp xỉ, và sai lệch chỉ lộ ra khi so output thật.
     Triển khai một model ONNX chưa kiểm là đưa lỗi im lặng lên thiết bị.
+
+    ★ BẪY ĐÃ GẶP THẬT: PHẢI kiểm bằng ẢNH THẬT, không phải torch.randn ★
+
+    Bản đầu của hàm này kiểm bằng `torch.randn` (nhiễu Gauss chuẩn). Kết quả đo
+    được trên ĐÚNG các model của bài:
+
+        model           randn      ảnh test thật
+        m1_lenet        4e-06      3,8e-06
+        m2_vggres       2e-06      2,3e-05
+        m3_resnet18     8e-07      1,8e-05
+        m3_effnetb0     2,7e-01 ✗  1,4e-05 ✓  (256/256 dự đoán khớp)
+
+    EfficientNet-B0 bị báo LỆCH QUÁ NGƯỠNG, nhưng ONNX của nó hoàn toàn đúng.
+    Nguyên nhân: model được train trên ảnh đã CLAHE + chuẩn hoá ImageNet, còn
+    `randn` nằm NGOÀI phân phối đó. Với input lạ, mạng chạy vào vùng mà SiLU và
+    khối squeeze-excite cho hoạt hoá cực lớn, nên chênh lệch dấu phẩy động ~1e-7
+    của từng phép toán bị KHUẾCH ĐẠI qua 82 lớp. Mạng càng sâu, input càng lạ thì
+    càng phóng to — nên chỉ model sâu nhất mới bị báo động.
+
+    Hệ quả tệ hơn cả bỏ qua bước kiểm: một phép kiểm hay báo động sai sẽ bị cả
+    nhóm học cách phớt đi, và lần nó báo ĐÚNG thì cũng không ai tin.
+
+    Vì vậy `sample` nhận một batch ẢNH THẬT đã tiền xử lý. Không truyền thì hàm
+    vẫn chạy với randn nhưng nói rõ là phép kiểm đang YẾU.
     """
     try:
         import numpy as np
@@ -274,7 +298,13 @@ def verify_onnx(onnx_path: str | Path, model: nn.Module, img_size: int,
         return False
 
     try:
-        x = torch.randn(2, 3, img_size, img_size)
+        if sample is None:
+            x = torch.randn(2, 3, img_size, img_size)
+            nguon = "randn (NGOÀI phân phối — phép kiểm yếu, xem docstring)"
+        else:
+            x = sample.cpu().float()
+            nguon = f"{len(x)} ảnh test thật"
+
         with torch.no_grad():
             expected = model.cpu().eval()(x).numpy()
 
@@ -283,9 +313,12 @@ def verify_onnx(onnx_path: str | Path, model: nn.Module, img_size: int,
         actual = session.run(None, {"input": x.numpy()})[0]
 
         diff = float(np.abs(expected - actual).max())
-        ok = diff < tolerance
-        log.info("  kiểm ONNX: sai lệch lớn nhất %.2e -> %s",
-                 diff, "KHỚP" if ok else "LỆCH QUÁ NGƯỠNG")
+        # Tiêu chí THỰC SỰ quan trọng khi triển khai: lớp dự đoán có đổi không.
+        # Lệch logit 1e-3 mà argmax không đổi thì model vẫn dùng được.
+        khop = int((expected.argmax(1) == actual.argmax(1)).sum())
+        ok = diff < tolerance and khop == len(x)
+        log.info("  kiểm ONNX trên %s: lệch logit tối đa %.2e · dự đoán khớp %d/%d -> %s",
+                 nguon, diff, khop, len(x), "KHỚP" if ok else "LỆCH QUÁ NGƯỠNG")
         return ok
     except Exception as exc:
         log.warning("  Không kiểm được ONNX: %s", exc)

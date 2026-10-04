@@ -80,3 +80,58 @@ def test_quantize_static_tra_None_thay_vi_vo(m1):
     if result is not None:
         with torch.no_grad():
             assert result(torch.randn(1, 3, 48, 48)).shape == (1, 43)
+
+
+# =====================================================================
+# verify_onnx — xem sự cố 9 trong docs/SU_CO.md
+# =====================================================================
+
+onnxruntime = pytest.importorskip("onnxruntime",
+                                  reason="cần onnxruntime để kiểm ONNX")
+
+
+@pytest.fixture(scope="module")
+def m1_onnx(m1, tmp_path_factory):
+    """Xuất M1 ra ONNX một lần, dùng lại cho mọi test dưới."""
+    from gtsrb.deploy.export import export_onnx
+    path = export_onnx(m1, 48, tmp_path_factory.mktemp("onnx") / "m1.onnx")
+    if path is None:
+        pytest.skip("không xuất được ONNX trong môi trường này")
+    return path
+
+
+def test_onnx_khop_khi_kiem_bang_anh_that(m1, m1_onnx):
+    """Truyền sample thì phải KHỚP — đây là đường dùng thật của export_edge."""
+    from gtsrb.deploy.export import verify_onnx
+    torch.manual_seed(0)
+    anh = torch.rand(8, 3, 48, 48)      # rand [0,1], giống thang ảnh đã chuẩn hoá
+    assert verify_onnx(m1_onnx, m1, 48, sample=anh) is True
+
+
+def test_verify_onnx_bat_duoc_model_SAI(m1, m1_onnx):
+    """Phép kiểm phải thật sự phát hiện lệch, không phải luôn trả True.
+
+    So file ONNX của M1 với một model M1 KHÁC (khởi tạo ngẫu nhiên, trọng số
+    khác hẳn). Nếu hàm vẫn báo KHỚP thì nó chẳng kiểm gì cả.
+    """
+    from gtsrb.deploy.export import verify_onnx
+    torch.manual_seed(999)
+    model_khac = build_model("m1_lenet", img_size=48).eval()
+    anh = torch.rand(8, 3, 48, 48)
+    assert verify_onnx(m1_onnx, model_khac, 48, sample=anh) is False
+
+
+def test_so_ca_argmax_chu_khong_chi_so_logit(m1, m1_onnx):
+    """Tiêu chí triển khai là LỚP DỰ ĐOÁN, nên tolerance lỏng vẫn phải so argmax.
+
+    Đặt tolerance = 1e9 (bỏ hẳn điều kiện lệch logit). Với model đúng thì vẫn
+    KHỚP; với model khác hẳn thì argmax lệch nên phải FAIL — chứng tỏ argmax là
+    một điều kiện độc lập, không ăn theo tolerance.
+    """
+    from gtsrb.deploy.export import verify_onnx
+    anh = torch.rand(8, 3, 48, 48)
+    assert verify_onnx(m1_onnx, m1, 48, tolerance=1e9, sample=anh) is True
+
+    torch.manual_seed(12345)
+    model_khac = build_model("m1_lenet", img_size=48).eval()
+    assert verify_onnx(m1_onnx, model_khac, 48, tolerance=1e9, sample=anh) is False

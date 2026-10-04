@@ -93,7 +93,11 @@ def process_run(run_dir: Path, args, out_dir: Path) -> pd.DataFrame | None:
     export_torchscript(model, img_size, out_dir / f"{name}.torchscript.pt")
     onnx_path = export_onnx(model, img_size, out_dir / f"{name}.onnx")
     if onnx_path:
-        verify_onnx(onnx_path, model, img_size)
+        # Kiểm bằng ẢNH TEST THẬT, không phải randn. Với randn, EfficientNet-B0
+        # báo lệch 2,7e-01 trong khi ONNX của nó hoàn toàn đúng (ảnh thật:
+        # 1,4e-05, 256/256 dự đoán khớp) — xem docstring của verify_onnx().
+        anh_that = next(iter(calib_loader))[0][:32]
+        verify_onnx(onnx_path, model, img_size, sample=anh_that)
 
     frame = pd.DataFrame(rows)
     base = frame.iloc[0]
