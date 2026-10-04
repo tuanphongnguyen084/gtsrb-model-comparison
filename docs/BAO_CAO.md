@@ -11,7 +11,7 @@
 
 ## Tóm tắt
 
-Nhóm xây và so sánh 5 mô hình phân loại 43 lớp biển báo giao thông Đức trên
+Nhóm xây và so sánh 1 mô hình phân loại 43 lớp biển báo giao thông Đức trên
 bộ GTSRB (39.209 ảnh train + 12.630 ảnh test chính thức), theo ba hướng: CNN đơn giản tự
 xây (LeNet), CNN sâu tự xây (VGG-like có BatchNorm, residual, spatial dropout, Global
 Average Pooling), và transfer learning từ ba backbone pretrained ImageNet.
@@ -28,7 +28,7 @@ thì nên chọn mô hình nào.
 1. Mô hình **tự xây 1,24 M tham số đánh bại hai backbone pretrained ImageNet** với ý nghĩa
    thống kê (p < 1e-6), trong khi nhanh hơn 13–68 lần.
 2. **Latency không tỉ lệ với FLOPs**, chênh tới **64 lần** về hiệu quả trên mỗi GFLOP.
-   Mô hình tên "EfficientNet" lại là mô hình **chậm nhất** trong cả 5.
+   Mô hình tên "EfficientNet" lại là mô hình **chậm nhất** trong cả 1.
 3. Mô hình có **accuracy sạch cao nhất lại kém bền nhất** trước nhiễu thực tế.
 
 ---
@@ -128,7 +128,7 @@ sau 3 epoch, rồi **nhảy lên 96,4% chỉ trong một epoch** ngay khi mở b
 Cross-entropy + **label smoothing 0,1**; Adam/AdamW; warmup tuyến tính 3 epoch rồi
 **cosine annealing**; gradient clipping 1,0; mixed precision (tự bật trên CUDA, tắt trên
 MPS); **early stopping theo val macro-F1** (không theo accuracy, vì dữ liệu mất cân bằng
-10,7:1 khiến accuracy bị các lớp đông chi phối). Cả 5 mô hình dùng **chung
+10,7:1 khiến accuracy bị các lớp đông chi phối). Cả 1 mô hình dùng **chung
 một hàm `fit()`** để so sánh được công bằng.
 
 ---
@@ -137,13 +137,9 @@ một hàm `fit()`** để so sánh được công bằng.
 
 ### 3.1 Bảng so sánh chính (tập test chính thức, 12.630 ảnh)
 
-| Mô hình        |   Tham số (M) |   FLOPs (G) |   Dung lượng (MB) | Top-1   | Top-5   |   Macro-F1 |    ECE |   p95 CPU (ms) |   Train (phút) |
-|:---------------|--------------:|------------:|------------------:|:--------|:--------|-----------:|-------:|---------------:|---------------:|
-| m3_resnet18    |         11.2  |        3.65 |              44.8 | 99.33%  | 99.94%  |     0.9903 | 0.1085 |           18.3 |             61 |
-| m2_vggres      |          1.24 |        0.29 |               5   | 99.26%  | 99.94%  |     0.988  | 0.0535 |            3.7 |             24 |
-| m3_effnetb0    |          4.06 |        0.83 |              16.2 | 98.77%  | 99.91%  |     0.9838 | 0.0973 |          256.6 |            132 |
-| m3_mobilenetv2 |          2.28 |        0.65 |               9.1 | 98.73%  | 99.96%  |     0.9796 | 0.1076 |           49   |             55 |
-| m1_lenet       |          2.42 |        0.07 |               9.7 | 98.46%  | 99.85%  |     0.9778 | 0.131  |            1.1 |             12 |
+| Mô hình   |   Tham số (M) |   FLOPs (G) |   Dung lượng (MB) | Top-1   | Top-5   |   Macro-F1 |   ECE |   p95 CPU (ms) |   Train (phút) |
+|:----------|--------------:|------------:|------------------:|:--------|:--------|-----------:|------:|---------------:|---------------:|
+| m1_lenet  |          2.42 |        0.07 |               9.7 | 98.46%  | 99.85%  |     0.9778 | 0.131 |            1.1 |             12 |
 
 **Lưu ý khi đọc:** cột **Top-5 gần như vô nghĩa** ở bài này. Top-5 ra đời cho ImageNet
 1000 lớp; trên 43 lớp nó nghĩa là "đúng trong 11,6% số lớp" nên mọi mô hình tử tế đều
@@ -182,29 +178,29 @@ nguồn về độ phân giải** — GTSRB không thoả cả hai điều kiệ
 
 ### 3.3 Phân tích theo lớp
 
-**Mô hình `m3_resnet18`:**
+**Mô hình `m1_lenet`:**
 
 |   Lớp | Tên                            |    F1 |   Số ảnh test |
 |------:|:-------------------------------|------:|--------------:|
-|    42 | Hết cấm vượt (xe trên 3,5 tấn) | 0.913 |            90 |
-|    30 | Cẩn thận băng/tuyết            | 0.933 |           150 |
-|     6 | Hết giới hạn 80 km/h           | 0.94  |           150 |
-|    21 | Đường cong đôi                 | 0.977 |            90 |
-|    11 | Ưu tiên ở giao lộ kế tiếp      | 0.978 |           420 |
-|     5 | Giới hạn 80 km/h               | 0.979 |           630 |
-|     3 | Giới hạn 60 km/h               | 0.983 |           450 |
-|    40 | Vòng xuyến bắt buộc            | 0.989 |            90 |
+|    27 | Người đi bộ                    | 0.904 |            60 |
+|     6 | Hết giới hạn 80 km/h           | 0.905 |           150 |
+|    42 | Hết cấm vượt (xe trên 3,5 tấn) | 0.911 |            90 |
+|    30 | Cẩn thận băng/tuyết            | 0.93  |           150 |
+|    41 | Hết cấm vượt                   | 0.942 |            60 |
+|    22 | Đường xấu                      | 0.947 |           120 |
+|    26 | Đèn tín hiệu                   | 0.951 |           180 |
+|    40 | Vòng xuyến bắt buộc            | 0.951 |            90 |
 
 Các cặp bị nhầm nhiều nhất:
 
 |   Lớp thật | Tên                       |   Đoán thành | Tên                            |   Số lần |
 |-----------:|:--------------------------|-------------:|:-------------------------------|---------:|
-|         11 | Ưu tiên ở giao lộ kế tiếp |           30 | Cẩn thận băng/tuyết            |       17 |
-|          6 | Hết giới hạn 80 km/h      |           42 | Hết cấm vượt (xe trên 3,5 tấn) |       16 |
-|          3 | Giới hạn 60 km/h          |            5 | Giới hạn 80 km/h               |       13 |
-|          8 | Giới hạn 120 km/h         |            5 | Giới hạn 80 km/h               |        7 |
-|         38 | Đi bên phải               |            5 | Giới hạn 80 km/h               |        4 |
-|         21 | Đường cong đôi            |           31 | Động vật hoang dã qua đường    |        4 |
+|         17 | Cấm đi vào                |            9 | Cấm vượt                       |       16 |
+|          6 | Hết giới hạn 80 km/h      |           42 | Hết cấm vượt (xe trên 3,5 tấn) |       14 |
+|          3 | Giới hạn 60 km/h          |            5 | Giới hạn 80 km/h               |       14 |
+|          8 | Giới hạn 120 km/h         |            5 | Giới hạn 80 km/h               |       11 |
+|         22 | Đường xấu                 |           25 | Đang thi công                  |       10 |
+|         11 | Ưu tiên ở giao lộ kế tiếp |           30 | Cẩn thận băng/tuyết            |       10 |
 
 Hai nguyên nhân cần tách bạch: F1 thấp kèm **support cao** là do **hình giống nhau**
 (vấn đề độ phân giải — các biển giới hạn tốc độ chỉ khác chữ số, mà ở 48×48 chữ số chỉ còn
@@ -270,7 +266,7 @@ cố định (launch kernel, truy cập bộ nhớ) mà làm rất ít phép tí
 thông bộ nhớ**, không bởi năng lực tính toán.
 
 **Hệ quả thực hành: chọn mô hình theo FLOPs sẽ dẫn tới EfficientNet-B0 — mô hình chậm
-nhất trong cả 5.** Muốn nói về triển khai thì phải đo wall-clock trên thiết
+nhất trong cả 1.** Muốn nói về triển khai thì phải đo wall-clock trên thiết
 bị đích.
 
 ### 3.7 Grad-CAM
@@ -297,12 +293,12 @@ Quyết định dựa trên **ba trục**, không chỉ accuracy:
 2. **Latency p95** ở batch = 1 (tình huống xe xử lý từng khung ảnh).
 3. **Relative robustness** dưới nhiễu — điều kiện vận hành thật.
 
-Mô hình macro-F1 cao nhất là `m3_resnet18` (0.9903). Nhưng trong nhóm **tương đương
-thống kê** với nó, mô hình nhanh nhất là **`m2_vggres`** — nhanh hơn **4.9
-lần** ở p95. Trả thêm 4.9 lần latency để lấy chênh lệch accuracy *không có ý
+Mô hình macro-F1 cao nhất là `m1_lenet` (0.9778). Nhưng trong nhóm **tương đương
+thống kê** với nó, mô hình nhanh nhất là **`m1_lenet`** — nhanh hơn **1.0
+lần** ở p95. Trả thêm 1.0 lần latency để lấy chênh lệch accuracy *không có ý
 nghĩa thống kê* là lựa chọn tồi trên hệ thống thời gian thực.
 
-→ **Khuyến nghị: `m2_vggres`.** Chi tiết suy luận ba bước: `docs/KET_QUA.md` mục 9.
+→ **Khuyến nghị: `m1_lenet`.** Chi tiết suy luận ba bước: `docs/KET_QUA.md` mục 9.
 
 ---
 

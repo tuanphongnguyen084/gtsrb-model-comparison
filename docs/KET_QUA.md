@@ -4,7 +4,7 @@
 > **Đừng sửa tay** — lần chạy sau sẽ ghi đè.
 > Mọi số đều truy được về một `artifacts/runs/<run_id>/result.json` cụ thể.
 >
-> Cập nhật lần cuối: 2026-10-04 13:01 · 5 run
+> Cập nhật lần cuối: 2026-10-04 21:50 · 5 run
 
 ---
 
@@ -258,35 +258,29 @@ Chạy: `python scripts/run_ablation.py --axes all` rồi `--collect-only`
 
 ## 9. Khuyến nghị triển khai biên
 
-**Khuyến nghị: `m2_vggres`** — suy ra từ dữ liệu theo ba bước bên dưới.
+**Khuyến nghị: `m1_lenet`** — suy ra từ dữ liệu theo ba bước bên dưới.
 
-### Bước 1 — Model macro-F1 cao nhất: `m3_resnet18` (0.9903)
+### Bước 1 — Model macro-F1 cao nhất: `m1_lenet` (0.9778)
 
 ### Bước 2 — Những model TƯƠNG ĐƯƠNG THỐNG KÊ với nó (McNemar, p ≥ 0,05)
 
 | Cặp | n₀₁ | n₁₀ | p-value | Kết luận |
 |---|---|---|---|---|
+| m1_lenet vs m2_vggres | 35 | 136 | 2.054e-14 | khác biệt THẬT |
+| m1_lenet vs m3_effnetb0 | 83 | 122 | 0.007954 | khác biệt THẬT |
+| m1_lenet vs m3_mobilenetv2 | 89 | 124 | 0.01983 | khác biệt THẬT |
 | m1_lenet vs m3_resnet18 | 41 | 151 | 3.65e-15 | khác biệt THẬT |
-| m2_vggres vs m3_resnet18 | 51 | 60 | 0.4477 | TƯƠNG ĐƯƠNG |
-| m3_effnetb0 vs m3_resnet18 | 18 | 89 | 1.313e-11 | khác biệt THẬT |
-| m3_mobilenetv2 vs m3_resnet18 | 25 | 100 | 3.622e-11 | khác biệt THẬT |
 
-Nhóm tương đương: **m2_vggres, m3_resnet18**
+Nhóm tương đương: **m1_lenet**
 
 ### Bước 3 — Trong nhóm đó, chọn model có latency p95 thấp nhất (batch=1, cpu)
 
 | Model | Latency p95 | #params | Dung lượng | FLOPs | Test top-1 |
 |---|---|---|---|---|---|
-| `m2_vggres` ← | 3.75 ms | 1.24 M | 5.0 MB | 0.290 G | 99.26% |
-| `m3_resnet18` | 18.31 ms | 11.20 M | 44.8 MB | 3.647 G | 99.33% |
+| `m1_lenet` ← | 1.07 ms | 2.42 M | 9.7 MB | 0.075 G | 98.46% |
 
 ### Kết luận
 
-> `m2_vggres` và `m3_resnet18` **tương đương về accuracy** (chênh 0.07 điểm, McNemar p ≥ 0,05 → không có ý nghĩa thống kê).
-> Nhưng `m2_vggres` **nhanh hơn 4.9 lần** (3.75 ms so với 18.31 ms ở p95, batch=1) và **nhẹ hơn 9.0 lần** (5.0 MB so với 44.8 MB).
->
-> Trả thêm 4.9 lần latency để lấy 0.07 điểm accuracy **không có ý nghĩa thống kê** là lựa chọn tồi trên hệ thống thời gian thực.
-
-**Đây là lý do phải kiểm định thống kê.** Nếu chỉ nhìn bảng accuracy, kết luận sẽ là "chọn `m3_resnet18` vì nó cao hơn" — một kết luận **sai**.
+> Chỉ `m1_lenet` nằm trong nhóm tốt nhất về accuracy (không model nào tương đương thống kê với nó), nên nó cũng là lựa chọn triển khai.
 
 > ⚠️ Số latency này đo trên máy phát triển. Trước khi chốt triển khai thật, phải **đo lại trên thiết bị đích** — latency không so sánh được giữa hai máy khác nhau.

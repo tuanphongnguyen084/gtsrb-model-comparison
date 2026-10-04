@@ -13,6 +13,14 @@ help:  ## Hiện danh sách lệnh
 	  | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
 # ---------------------------------------------------------------- môi trường
+.PHONY: progress
+progress:  ## Xem tiến độ mẻ đang chạy (thêm -w để tự làm mới)
+	@$(PY) scripts/progress.py
+
+.PHONY: watch
+watch:  ## Theo dõi tiến độ, tự làm mới mỗi 5 giây
+	@$(PY) scripts/progress.py -w
+
 .PHONY: setup-mac
 setup-mac:  ## Cài môi trường trên macOS (Apple Silicon, dùng MPS)
 	python3 -m venv $(HOME)/.venv

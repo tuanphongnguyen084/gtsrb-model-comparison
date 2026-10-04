@@ -128,6 +128,35 @@ def main() -> None:
     if not index_csv.exists():
         raise SystemExit(f"Chưa có {index_csv}. Chạy: make data")
 
+    # ---- Chốt an toàn 1: index.csv phải đang ở trạng thái ĐÚNG trước khi bắt đầu ----
+    # Nếu một lần chạy trước bị kill giữa chừng, index.csv có thể còn kẹt ở split
+    # RANDOM. Chạy tiếp từ trạng thái đó sẽ cho kết quả vô nghĩa mà không báo lỗi.
+    before = check_leakage(pd.read_csv(index_csv))["n_shared_tracks"]
+    if before != 0:
+        raise SystemExit(
+            f"index.csv đang ở trạng thái SPLIT SAI ({before} track dùng chung).\n"
+            f"Nhiều khả năng một lần chạy trước bị dừng giữa chừng.\n"
+            f"Khôi phục bằng: make data   (hoặc python scripts/prepare_data.py --skip-cache)"
+        )
+
+    # ---- Chốt an toàn 2: không cho hai bản chạy cùng lúc ----
+    # Thí nghiệm này SỬA index.csv. Hai bản chạy song song sẽ giẫm chân nhau và
+    # làm hỏng split cho MỌI thực nghiệm khác. Đã suýt xảy ra thật.
+    lock = index_csv.parent / ".leakage.lock"
+    if lock.exists():
+        try:
+            other = int(lock.read_text())
+            import os
+            os.kill(other, 0)           # còn sống?
+            raise SystemExit(
+                f"Đã có một thí nghiệm rò rỉ đang chạy (PID {other}). "
+                f"Hai bản cùng sửa index.csv sẽ hỏng dữ liệu."
+            )
+        except (ValueError, ProcessLookupError, PermissionError):
+            lock.unlink(missing_ok=True)      # khoá cũ của tiến trình đã chết
+    import os
+    lock.write_text(str(os.getpid()))
+
     # ---- Sao lưu để LUÔN khôi phục được ----
     backup = index_csv.with_suffix(".csv.leakage_backup")
     shutil.copy(index_csv, backup)
@@ -145,6 +174,7 @@ def main() -> None:
         # chạy sau đó sẽ bị rò rỉ mà không ai biết.
         shutil.copy(backup, index_csv)
         backup.unlink(missing_ok=True)
+        (index_csv.parent / ".leakage.lock").unlink(missing_ok=True)
         log.info("")
         log.info("Đã KHÔI PHỤC %s về split theo track.", index_csv)
         report = check_leakage(pd.read_csv(index_csv))
