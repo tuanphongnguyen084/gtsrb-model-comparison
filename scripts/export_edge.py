@@ -122,8 +122,12 @@ def main() -> None:
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    # main_only=True: chỉ nén 5 model CHÍNH. Run ablation/seed/thí nghiệm rò rỉ
+    # không phải thứ đem đi triển khai, nén chúng vừa tốn thời gian vừa làm
+    # bảng kết quả khó đọc.
     frames = [f for f in (process_run(d, args, out_dir)
-                          for d in find_run_dirs(args.runs)) if f is not None]
+                          for d in find_run_dirs(args.runs, main_only=True))
+              if f is not None]
     if not frames:
         return
 

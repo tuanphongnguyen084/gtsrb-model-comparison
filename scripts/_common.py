@@ -23,25 +23,55 @@ from gtsrb.utils.logging import get_logger
 log = get_logger()
 
 
-def find_run_dirs(patterns: list[str]) -> list[Path]:
-    """Mở rộng các glob thành danh sách thư mục run CÓ checkpoint.
+def find_run_dirs(patterns: list[str], main_only: bool = False) -> list[Path]:
+    """Mở rộng các glob thành danh sách thư mục run ĐÃ TRAIN XONG.
 
-    Bỏ qua thư mục chưa train xong (không có best.pt) thay vì vỡ giữa chừng.
+    ★ Điều kiện là có `result.json`, KHÔNG phải `best.pt`.
+    Lý do (lỗi đã gặp thật): `fit()` lưu best.pt sau MỖI epoch nhưng chỉ ghi
+    result.json khi train xong hẳn. Một run bị kill giữa chừng vẫn có best.pt,
+    và nếu chỉ lọc theo file đó thì nó lọt vào bảng kết quả với con số vô nghĩa —
+    đã xảy ra: một run M1 bị kill ở epoch 3 lọt vào bảng nén với top-1 = 0,66
+    thay vì 0,98, mà không có gì cảnh báo.
+
+    `main_only=True` bỏ thêm các run có tag (ablation, seed, thí nghiệm rò rỉ) —
+    dùng khi chỉ quan tâm 5 model chính.
     """
     dirs: list[Path] = []
     for pattern in patterns:
         dirs += [Path(p) for p in sorted(glob.glob(pattern)) if Path(p).is_dir()]
 
-    with_ckpt = [d for d in dirs if (d / "best.pt").exists()]
-    skipped = len(dirs) - len(with_ckpt)
-    if skipped:
-        log.warning("Bỏ qua %d thư mục chưa có best.pt (train chưa xong?)", skipped)
-    if not with_ckpt:
+    complete, incomplete = [], []
+    for d in dirs:
+        (complete if (d / "result.json").exists() else incomplete).append(d)
+
+    if incomplete:
+        log.warning("Bỏ qua %d run TRAIN CHƯA XONG (có best.pt nhưng thiếu result.json):",
+                    len(incomplete))
+        for d in incomplete[:5]:
+            log.warning("    %s", d.name)
+
+    if main_only:
+        tagged = [d for d in complete if _run_tag(d)]
+        if tagged:
+            log.info("Bỏ qua %d run phụ (ablation/seed/thí nghiệm): %s",
+                     len(tagged), ", ".join(_run_tag(d) for d in tagged[:4]))
+        complete = [d for d in complete if not _run_tag(d)]
+
+    if not complete:
         raise SystemExit(
-            f"Không tìm thấy run nào có best.pt trong {patterns}.\n"
+            f"Không tìm thấy run nào ĐÃ TRAIN XONG trong {patterns}.\n"
             f"Chạy trước: make train-m1  (hoặc make train-m2 / make train-m3)"
         )
-    return with_ckpt
+    return complete
+
+
+def _run_tag(run_dir: Path) -> str:
+    """Tag của một run ('' nếu là run chính). Đọc từ result.json."""
+    try:
+        return json.loads((run_dir / "result.json").read_text(encoding="utf-8")
+                          ).get("notes", "") or ""
+    except Exception:
+        return ""
 
 
 def load_run(run_dir: Path, device: torch.device):

@@ -237,7 +237,21 @@ def main() -> None:
     for run_dir in run_dirs:
         evaluated = evaluate_one_run(run_dir, device, args.batch_size)
         model_key, stats = evaluated["model_key"], evaluated["stats"]
-        predictions[model_key] = (stats["y_true"], stats["y_pred"])
+
+        # ★ CHỈ run CHÍNH mới vào McNemar.
+        #
+        # LỖI ĐÃ GẶP: `predictions` đánh khoá theo TÊN MODEL, mà nhiều run có cùng
+        # tên (m1_lenet thật, m1_lenet của thí nghiệm rò rỉ, 12 biến thể ablation
+        # của m2_vggres...). Run xử lý sau GHI ĐÈ run trước, nên McNemar có thể
+        # đang so một biến thể ablation thay vì model thật — mà không báo gì.
+        tag = read_result(run_dir).get("notes", "") or ""
+        if tag:
+            log.info("  (run phụ, tag=%r — không đưa vào McNemar)", tag)
+        elif model_key in predictions:
+            log.warning("  TRÙNG TÊN: đã có run chính tên %r. Giữ run ĐẦU TIÊN, "
+                        "bỏ qua %s cho McNemar.", model_key, run_dir.name)
+        else:
+            predictions[model_key] = (stats["y_true"], stats["y_pred"])
 
         save_per_class(model_key, stats, tables_dir)
         save_confusion(model_key, stats, tables_dir, figures_dir)

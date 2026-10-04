@@ -85,7 +85,7 @@ def main() -> None:
     set_seed(42)
     device = pick_device(args.device or "auto")
 
-    run_dirs = find_run_dirs(args.runs)
+    run_dirs = find_run_dirs(args.runs, main_only=True)
 
     # --- Chạy lại thì BỎ QUA model đã có trong CSV ---
     #

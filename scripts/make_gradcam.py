@@ -212,7 +212,7 @@ def main() -> None:
     figures_dir = Path(args.figures)
     figures_dir.mkdir(parents=True, exist_ok=True)
 
-    for run_dir in find_run_dirs(args.runs):
+    for run_dir in find_run_dirs(args.runs, main_only=True):
         gradcam_for_run(run_dir, device, figures_dir, args)
 
 

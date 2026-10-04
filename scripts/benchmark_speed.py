@@ -167,7 +167,7 @@ def main() -> None:
 
     devices = pick_devices(args.devices)
     rows = [benchmark_one_run(run_dir, devices, args)
-            for run_dir in find_run_dirs(args.runs)]
+            for run_dir in find_run_dirs(args.runs, main_only=True)]
 
     frame = pd.DataFrame(rows)
     print_speed_table(frame, Path(args.out))
