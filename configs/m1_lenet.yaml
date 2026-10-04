@@ -1,0 +1,13 @@
+inherit: base.yaml
+# M1 — LeNet từ số 0. MỐC THAM CHIẾU.
+# Cố ý KHÔNG BatchNorm, KHÔNG residual: mọi điểm M2 hơn M1 phải quy được về
+# một thành phần cụ thể. Không "tinh chỉnh M1 cho mạnh lên".
+model:
+  name: m1_lenet
+  kwargs:
+    channels: [32, 64]
+    hidden: 256
+    dropout: 0.5
+train:
+  epochs: 30
+  lr: 0.001

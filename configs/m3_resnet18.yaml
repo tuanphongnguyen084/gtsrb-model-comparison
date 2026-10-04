@@ -1,0 +1,36 @@
+inherit: base.yaml
+# M3 — transfer learning, backbone resnet18 pretrained ImageNet.
+#
+# BA THỨ BẮT BUỘC KHÁC so với M1/M2, mỗi thứ có lý do kỹ thuật:
+#   img_size 224  : 3 backbone downsample 32x -> 48/32 = 1,5 là vô dụng; 224/32 = 7
+#   normalize     : imagenet, vì trọng số + running stats của BN học trên phân phối đó
+#   2 pha         : freeze head-only 3 epoch rồi mở băng với discriminative LR
+data:
+  img_size: 224
+  normalize: imagenet       # KHÔNG phải gtsrb
+  cache_size: 48            # cache ở 48, Dataset nội suy lên 224
+model:
+  name: m3_resnet18
+  kwargs:
+    pretrained: true
+    head_dropout: 0.2
+train:
+  epochs: 15
+  batch_size: 64            # 224x224 tốn bộ nhớ gấp ~22 lần 48x48
+  optimizer: adamw
+  weight_decay: 0.0001
+  lr: 0.001
+  warmup_epochs: 1
+  patience: 5
+  phases:
+    - name: freeze_head      # Pha 1: chỉ train head
+      epochs: 3
+      freeze_backbone: true
+      lr: 0.001
+    - name: finetune_all     # Pha 2: mở băng, discriminative LR
+      epochs: 12
+      freeze_backbone: false
+      discriminative_lr:
+        early: 0.00001       # 1e-5  cạnh/màu — đã tốt sẵn
+        middle: 0.0001       # 1e-4  hoa văn
+        head: 0.001          # 1e-3  ngữ nghĩa — đổi hoàn toàn

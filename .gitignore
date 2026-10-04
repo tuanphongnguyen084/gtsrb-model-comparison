@@ -1,0 +1,38 @@
+# Dữ liệu và checkpoint — KHÔNG commit (nặng hàng GB)
+data/raw/
+data/processed/
+artifacts/
+
+# Log của các lần chạy — mỗi máy một khác, không ai cần log của người khác
+logs/
+
+# File đóng gói để upload Colab — sinh lại bằng `make zip`
+gtsrb_code.zip
+*.pt
+*.pth
+*.onnx
+
+# Kết quả sinh ra tự động (trừ bảng/hình cuối cùng đưa vào báo cáo)
+reports/figures/*.png
+!reports/figures/.gitkeep
+reports/tables/*.csv
+!reports/tables/.gitkeep
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# Notebook — output đã bị nbstripout xoá, nhưng phòng xa
+.ipynb_checkpoints/
+
+# Hệ điều hành / IDE
+.DS_Store
+.vscode/
+.idea/
+
+# Bí mật
+.env

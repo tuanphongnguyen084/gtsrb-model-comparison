@@ -1,0 +1,10 @@
+inherit: base.yaml
+# smoke.yaml — cấu hình CHẠY THỬ NHANH để kiểm tra đường ống không vỡ.
+# Dùng khi mới clone repo hoặc sau khi sửa code. KHÔNG dùng để báo cáo kết quả.
+model:
+  name: m1_lenet
+train:
+  epochs: 2
+  batch_size: 256
+  warmup_epochs: 0
+  patience: 99

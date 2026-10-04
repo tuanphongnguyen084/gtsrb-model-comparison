@@ -1,0 +1,12 @@
+# requirements-colab.txt — CHỈ những gói Colab CHƯA có sẵn.
+#
+# ★ TUYỆT ĐỐI KHÔNG pip install torch / torchvision trên Colab ★
+# Colab đã cài sẵn bản torch khớp với driver CUDA của máy ảo. Cài đè sẽ kéo về
+# bản CPU-only hoặc bản CUDA không khớp -> torch.cuda.is_available() thành False
+# và bạn train trên CPU mà không biết (chậm hơn ~20 lần, không báo lỗi gì).
+#
+# Các gói Colab đã có sẵn, không cần cài lại:
+#   torch, torchvision, numpy, opencv-python, pillow, pandas,
+#   scikit-learn, scipy, matplotlib, seaborn, pyyaml, tqdm, tabulate, pytest
+
+thop>=0.1.1          # đếm FLOPs, dùng trong src/gtsrb/deploy/speed.py
