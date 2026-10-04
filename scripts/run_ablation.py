@@ -189,6 +189,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--collect-only", action="store_true",
                         help="chi tong hop lai bang tu cac run da co")
     parser.add_argument("--out", default="reports/tables/ablation.csv")
+    parser.add_argument("--figures", default="reports/figures",
+                        help="noi luu hinh ablation (sinh cung voi --collect-only)")
     return parser.parse_args()
 
 
@@ -256,6 +258,77 @@ def execute_jobs(jobs: list[dict], args: argparse.Namespace) -> list[dict]:
     return failures
 
 
+# Cách lấy giá trị biến ra khỏi tên tag, cho mỗi trục
+AXIS_XLABEL = {
+    "resolution": "img_size", "augmentation": "chính sách augment",
+    "preprocess": "chế độ tiền xử lý", "scaling": "cấu hình",
+    "label_smoothing": "epsilon", "components": "biến thể",
+}
+
+
+def plot_axes(frame: pd.DataFrame, out_dir: Path,
+              metric: str = "test_macro_f1") -> list[Path]:
+    """Vẽ một hình cho mỗi trục ablation. Trả danh sách file đã tạo.
+
+    Mỗi hình trả lời đúng một câu: **biến này đáng bao nhiêu điểm macro-F1?**
+    Biên độ (max - min) in ngay trên tiêu đề, vì đó mới là con số đưa vào báo cáo,
+    không phải hình dáng đường cong.
+    """
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    if frame.empty or metric not in frame.columns:
+        log.warning("Chưa có cột %s — chạy scripts/evaluate.py trước khi vẽ.", metric)
+        return []
+
+    frame = frame.dropna(subset=[metric]).copy()
+    if frame.empty:
+        log.warning("Mọi run đều thiếu số TEST. Chạy: "
+                    'python scripts/evaluate.py --runs "artifacts/runs/*"')
+        return []
+
+    frame["axis"] = frame["tag"].astype(str).str.split("-").str[0]
+    # bỏ hậu tố -budget khi hiển thị, nhưng giữ thông tin để ghi chú
+    frame["value"] = (frame["tag"].astype(str)
+                      .str.split("-").str[1:].str.join("-")
+                      .str.replace("-budget", "", regex=False))
+    is_budget = frame["tag"].astype(str).str.contains("budget").any()
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    created = []
+
+    for axis, group in frame.groupby("axis"):
+        if axis not in AXIS_XLABEL:
+            continue
+        fig, ax = plt.subplots(figsize=(7.5, 4))
+        for model, part in group.groupby("model"):
+            part = part.sort_values("value")
+            ax.plot(part["value"].astype(str), part[metric],
+                    marker="o", label=model)
+
+        spread = group[metric].max() - group[metric].min()
+        best = group.loc[group[metric].idxmax(), "value"]
+        title = f"Ablation: {axis} — biên độ {spread:.4f} ({spread*100:.2f} điểm), tốt nhất: {best}"
+        if is_budget:
+            title += "\n(ngân sách 15 epoch — dùng để XẾP HẠNG, không phải số cuối cùng)"
+        ax.set_title(title, fontsize=10)
+        ax.set_xlabel(AXIS_XLABEL[axis])
+        ax.set_ylabel(metric)
+        ax.grid(alpha=0.3)
+        ax.legend(fontsize=8)
+        fig.tight_layout()
+
+        path = out_dir / f"ablation_{axis}.png"
+        fig.savefig(path, dpi=130)
+        plt.close(fig)
+        created.append(path)
+        log.info("  %-18s biên độ %.4f (%.2f điểm), tốt nhất %-14s -> %s",
+                 axis, spread, spread * 100, str(best), path.name)
+
+    return created
+
+
 def main() -> None:
     """Sinh danh sách thực nghiệm rồi chạy tuần tự, hoặc chỉ tổng hợp bảng."""
     args = parse_args()
@@ -266,6 +339,11 @@ def main() -> None:
         frame.to_csv(args.out, index=False)
         log.info("Tổng hợp %d run -> %s", len(frame), args.out)
         log.info("\n%s", frame.to_string(index=False))
+
+        log.info("")
+        log.info("Vẽ hình cho từng trục:")
+        created = plot_axes(frame, Path(args.figures))
+        log.info("Đã tạo %d hình.", len(created))
         return
 
     jobs = plan_jobs(args)

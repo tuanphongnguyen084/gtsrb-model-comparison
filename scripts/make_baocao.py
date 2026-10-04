@@ -47,6 +47,7 @@ def md(frame: pd.DataFrame | None, **kw) -> str:
 
 
 def pct(x) -> str:
+    """Số thực -> chuỗi phần trăm hai chữ số thập phân."""
     return "–" if pd.isna(x) else f"{x * 100:.2f}%"
 
 
@@ -103,6 +104,7 @@ def table_efficiency() -> str:
 
 
 def table_robustness() -> str:
+    """Bảng relative robustness trung bình theo loại nhiễu, kèm mCE."""
     frame = read("robustness_summary.csv", index_col=0)
     return MISSING if frame is None else frame.round(4).to_markdown()
 
@@ -122,6 +124,7 @@ def table_worst_classes(n: int = 8) -> str:
 
 
 def table_confusions(n: int = 6) -> str:
+    """n cặp bị nhầm nhiều nhất của mô hình tốt nhất."""
     main = read("main_comparison.csv")
     if main is None:
         return MISSING

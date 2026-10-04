@@ -70,9 +70,9 @@ train-m3:  ## Train M3 cả 3 backbone pretrained      [C]  nên chạy trên Co
 	$(PY) scripts/train.py --config configs/m3_effnetb0.yaml
 train-all: train-m1 train-m2 train-m3  ## Train cả 3 model
 
-# ---------------------------------------------------------------- đánh giá [D]
+# ---------------------------------------------------------------- đánh giá [Huy]
 .PHONY: eval
-eval:  ## Bảng so sánh chính + per-class + confusion + McNemar + ECE  [D]
+eval:  ## Bảng so sánh chính + per-class + confusion + McNemar + ECE  [Huy]
 	$(PY) scripts/evaluate.py --runs $(RUNS) --out reports/tables/main_comparison.csv
 
 .PHONY: ablation ablation-dry ablation-collect
@@ -85,24 +85,38 @@ ablation:  ## Chạy TOÀN BỘ ablation ở độ dài đầy đủ (6 trục, 
 ablation-collect:  ## Tổng hợp lại bảng ablation từ các run đã có
 	$(PY) scripts/run_ablation.py --collect-only
 
+.PHONY: seeds leakage edge
+seeds:  ## Chạy 3 seed cho M2 rồi gộp mean±std            [Hoàng]
+	$(PY) scripts/run_seeds.py --config configs/m2_vggres.yaml
+	$(PY) scripts/evaluate.py --runs "artifacts/runs/*seed*"
+	$(PY) scripts/run_seeds.py --collect-only
+leakage:  ## ĐO phần accuracy "ảo" do rò rỉ (train 2 lần)  [Huy]
+	$(PY) scripts/run_leakage_experiment.py
+edge:  ## Nén int8 + xuất TorchScript/ONNX + bảng đánh đổi [Phong Trần]
+	$(PY) scripts/export_edge.py --runs $(RUNS)
+
 .PHONY: robustness
-robustness:  ## 5 nhiễu x 5 mức x N model + relative robustness + mCE  [D]
+robustness:  ## 5 nhiễu x 5 mức x N model + relative robustness + mCE  [Huy]
 	$(PY) scripts/run_robustness.py --runs $(RUNS)
 
 # ---------------------------------------------------------------- C
 .PHONY: speed gradcam
-speed:  ## Latency p50/p95 + FLOPs + biểu đồ Pareto  [C]
+speed:  ## Latency p50/p95 + FLOPs + biểu đồ Pareto  [Phong Trần]
 	$(PY) scripts/benchmark_speed.py --runs $(RUNS)
-gradcam:  ## Lưới Grad-CAM: đúng / SAI / trước-sau nhiễu  [C]
+gradcam:  ## Lưới Grad-CAM: đúng / SAI / trước-sau nhiễu  [Phong Trần]
 
 .PHONY: report
-report:  ## Tự sinh docs/KET_QUA.md từ mọi result.json  [D]
+report:  ## Tự sinh docs/KET_QUA.md từ mọi result.json  [Phong Nguyễn]
 	$(PY) scripts/make_report.py
+
+.PHONY: baocao
+baocao:  ## Tự sinh docs/BAO_CAO.md — báo cáo nộp thầy     [Phong Nguyễn]
+	$(PY) scripts/make_baocao.py
 	$(PY) scripts/make_gradcam.py --runs $(RUNS)
 
 # ---------------------------------------------------------------- tất cả
 .PHONY: all
-all: data test train-all eval robustness speed gradcam  ## Toàn bộ đường ống
+all: data test train-all eval robustness speed gradcam edge report baocao  ## Toàn bộ đường ống
 
 .PHONY: clean-runs
 clean-runs:  ## Xoá mọi checkpoint và kết quả run (KHÔNG xoá dữ liệu)
