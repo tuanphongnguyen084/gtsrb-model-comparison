@@ -182,6 +182,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--budget", action="store_true",
                         help="CHE DO NGAN SACH THAP: 15 epoch + patience 4. "
                              "Du de XEP HANG cac bien the, tiet kiem ~60%% compute.")
+    parser.add_argument("--set", nargs="*", default=[], dest="overrides",
+                        metavar="KEY=VALUE",
+                        help="Override áp cho MỌI job, ví dụ train.num_workers=2. "
+                             "Đặt TRƯỚC override của trục nên không bao giờ ghi đè "
+                             "biến đang được thí nghiệm.")
     parser.add_argument("--subset", type=int, default=None,
                         help="chi N mau moi split (SMOKE TEST)")
     parser.add_argument("--dry-run", action="store_true",
@@ -212,6 +217,22 @@ def plan_jobs(args: argparse.Namespace) -> list[dict]:
     """
     axes = ALL_AXES if "all" in args.axes else args.axes
     jobs = build_jobs(axes, args.epochs)
+
+    # Override CHUNG của người dùng (--set) đi TRƯỚC override của trục.
+    #
+    # Thứ tự quan trọng: train.py lấy giá trị SAU cùng, nên đặt trước nghĩa là
+    # nếu người dùng vô tình truyền đúng biến mà trục đang thí nghiệm (ví dụ
+    # --set data.img_size=224 khi chạy trục resolution) thì TRỤC vẫn thắng, và
+    # thí nghiệm không bị phá âm thầm.
+    if getattr(args, "overrides", None):
+        trung = {o.split("=")[0] for o in args.overrides} & {
+            o.split("=")[0] for job in jobs for o in job["overrides"]}
+        if trung:
+            log.warning("--set có biến TRÙNG với biến của trục: %s "
+                        "-> giữ giá trị của TRỤC, bỏ qua --set cho biến đó.",
+                        ", ".join(sorted(trung)))
+        for job in jobs:
+            job["overrides"] = list(args.overrides) + job["overrides"]
 
     if args.budget:
         log.info("CHẾ ĐỘ NGÂN SÁCH: 15 epoch + patience 4 cho mọi job.")

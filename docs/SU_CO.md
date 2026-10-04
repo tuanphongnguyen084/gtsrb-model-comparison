@@ -246,7 +246,49 @@ backend có kernel cho mọi op trong model — chỉ đếm tham số và FLOPs
 
 ---
 
-## 11. Các lỗi KHÁC NÊN BIẾT TRƯỚC (chưa gặp nhưng gần như chắc chắn sẽ gặp)
+## 11. ★ Mất một mẻ Colab 2 giờ vì `!python` làm lỗi IM LẶNG
+
+**Triệu chứng.** Chạy Run all trên Colab, đợi 2 giờ, tải kết quả về thì chỉ có
+**3 run M3** — không có run ablation nào, mà ablation mới là thứ cần Colab nhất.
+
+**Nguyên nhân — hai lỗi cộng lại.**
+
+1. Ô ablation gọi `!python scripts/run_ablation.py --axes all --budget
+   --set train.num_workers=2`, nhưng `run_ablation.py` **không có** tham số
+   `--set`. argparse thoát với mã 2 ngay giây đầu.
+2. Với `!python`, lệnh lỗi **chỉ in thông báo rồi notebook CHẠY TIẾP**. Run all
+   đi tiếp sang ô train M3 — ô đó chạy đúng, mất 100 phút, và để lại 3 run trông
+   hoàn toàn bình thường. Không có gì báo động.
+
+**Cách nhận biết.** Trên Drive, thư mục run đầu tiên được tạo lúc 15:26 và là
+một run **M3**. Nếu ablation có chạy thì phải có run ablation tạo trước đó —
+ablation nằm ở ô 14, M3 ở ô 18.
+
+**Cách sửa.**
+
+- `run_ablation.py` nhận `--set`, và override chung được đặt **TRƯỚC** override
+  của trục: nếu ai vô tình truyền đúng biến mà trục đang thí nghiệm (ví dụ
+  `--set data.img_size=224` khi chạy trục `resolution`) thì **trục vẫn thắng**,
+  thí nghiệm không bị phá âm thầm. Có cảnh báo khi trùng biến.
+- Notebook thay `!python` bằng hàm `chay()` — nó đọc mã thoát và **raise
+  SystemExit** để Run all dừng ngay tại ô lỗi. Việc đã xong nằm trên Drive nên
+  lần chạy lại sẽ bỏ qua, không mất công.
+- `tests/test_notebook_colab.py` trích mọi lệnh script trong notebook rồi chạy
+  với đúng đối số đó, dừng ngay sau khi argparse phân tích xong.
+
+**★ Bẫy trong chính test này — cách làm đầu tiên của tôi SAI.** Tôi thêm
+`--help` vào lệnh và kiểm mã thoát. Nhưng argparse xử lý `--help` **TRƯỚC** khi
+kiểm các tham số khác, nên nó in help, thoát 0, và **bỏ qua `--set` lạ**. Test
+vẫn xanh dù lỗi còn nguyên. Phải để `parse_args()` chạy thật rồi chặn ngay sau
+đó. Đã kiểm ngược: bỏ `--set` ra khỏi script thì test đỏ với đúng thông báo
+`unrecognized arguments: --set train.num_workers=2`.
+
+**Bài học.** Một test không đỏ khi lỗi quay lại thì không phải test. Mỗi lần
+viết test chặn lỗi, phải **tái tạo lại lỗi** để xem test có bắt được không.
+
+---
+
+## 12. Các lỗi KHÁC NÊN BIẾT TRƯỚC (chưa gặp nhưng gần như chắc chắn sẽ gặp)
 
 | Triệu chứng | Nguyên nhân | Cách sửa |
 |---|---|---|
