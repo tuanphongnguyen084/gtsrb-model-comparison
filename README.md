@@ -92,6 +92,52 @@ M2 thay chỗ đó bằng `GlobalAvgPool→FC(256→43)` chỉ 11.051 tham số.
 
 ---
 
+## Kết quả
+
+Tập test chính thức, 12.630 ảnh. Mọi số sinh tự động từ `artifacts/runs/*/result.json`.
+
+| Mô hình | Tham số | FLOPs | Top-1 | Macro-F1 | ECE | p95 CPU |
+|---|---|---|---|---|---|---|
+| M3 ResNet18 | 11,20 M | 3,65 G | **99,33%** | **0,9903** | 0,1085 | 18,3 ms |
+| **M2 VGG-res** *(tự xây)* | **1,24 M** | 0,29 G | 99,26% | 0,9880 | **0,0535** | **3,7 ms** |
+| M3 EfficientNet-B0 | 4,06 M | 0,83 G | 98,77% | 0,9838 | 0,0973 | 256,6 ms |
+| M3 MobileNetV2 | 2,28 M | 0,65 G | 98,73% | 0,9796 | 0,1076 | 49,0 ms |
+| M1 LeNet | 2,42 M | 0,07 G | 98,46% | 0,9778 | 0,1310 | **1,1 ms** |
+
+### Ba phát hiện đi ngược kỳ vọng
+
+**1. CNN tự xây 1,24 M tham số đánh bại hai backbone pretrained ImageNet.**
+McNemar: M2 vs EfficientNet-B0 p = 6,3e-07; M2 vs MobileNetV2 p = 3,9e-07; M2 vs
+ResNet18 p = 0,45 (tương đương). Ảnh GTSRB trung vị chỉ 43×43 px nên upsample lên 224
+không tạo thêm thông tin — lợi thế pretrained bị triệt tiêu còn chi phí vẫn phải trả đủ.
+*(Lưu ý: so sánh này lẫn hai biến — pretrained và độ phân giải. Xem mục Hạn chế.)*
+
+**2. Latency không tỉ lệ FLOPs — chênh 64 lần.**
+
+| Mô hình | FLOPs | Latency p50 | ms/GFLOP |
+|---|---|---|---|
+| ResNet18 | 3,65 G | 16,7 ms | **4,6** |
+| EfficientNet-B0 | 0,83 G | **243,4 ms** | **294,1** |
+
+Chọn mô hình theo FLOPs sẽ chọn đúng mô hình **chậm nhất**.
+*(Đo trên CPU Apple Silicon + PyTorch; kết quả có thể khác trên x86 hoặc GPU.)*
+
+![Pareto accuracy-latency](docs/images/pareto.png)
+
+**3. Mô hình chính xác nhất không phải mô hình bền nhất.** M1 — yếu nhất về accuracy —
+có mCE tốt nhất dưới 5 loại nhiễu mô phỏng.
+
+![Robustness](docs/images/robustness_curves.png)
+
+### Grad-CAM: mô hình nhìn vào đâu khi nó SAI
+
+![Grad-CAM các ca sai](docs/images/gradcam_m1_lenet_wrong.png)
+
+Cột thứ tư cho thấy một ca điển hình: bản đồ nhiệt nằm trên **nền lá cây**, không nằm
+trên biển báo.
+
+---
+
 ## Phân công
 
 | Người | Phần việc | Sở hữu | Khối lượng |
@@ -133,6 +179,20 @@ artifacts/runs/     checkpoint + result.json mỗi run (không commit)
 ```
 
 ---
+
+## Hạn chế
+
+1. **Chưa chạy ablation** (30 cấu hình trên 6 trục). Hạ tầng đã sẵn
+   (`make ablation-budget`) nhưng chưa chạy — đây là thiếu sót lớn nhất.
+2. **Mỗi cấu hình chỉ một seed.** Chênh lệch nhỏ hơn nhiễu khởi tạo không nên kết luận.
+3. **So sánh M2 với M3 lẫn hai biến** (pretrained và độ phân giải). Ablation resolution
+   là bước cần thiết để tách chúng.
+4. **Mức nhiễu không so sánh được giữa hai nhóm độ phân giải** với motion blur — kernel
+   15 px phủ 31% ảnh 48×48 nhưng chỉ 6,7% ảnh 224×224. Kết luận robustness chỉ rút từ
+   `gauss_noise`, `low_light`, `occlusion`.
+5. **Đây là bài phân loại, không phải phát hiện.** Mô hình nhận biển báo đã cắt sẵn.
+
+Chi tiết đầy đủ: [docs/BAO_CAO.md](docs/BAO_CAO.md) mục 5.
 
 ## Quy tắc nhóm
 
