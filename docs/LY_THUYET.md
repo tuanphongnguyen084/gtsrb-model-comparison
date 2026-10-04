@@ -9,6 +9,43 @@
 
 ---
 
+---
+
+## Bản đồ: mở file code nào thì đọc mục nào
+
+Dùng bảng này khi bạn đang đọc một file và muốn biết lý thuyết đằng sau nó.
+Chiều ngược lại (đọc lý thuyết rồi muốn xem code) nằm ở dòng `📁 Code:` dưới mỗi mục.
+
+| File code | Đọc mục | Khái niệm chính |
+|---|---|---|
+| `data/download.py` | 0 | cấu trúc track của GTSRB, cái bẫy torchvision |
+| `data/preprocess.py` | 1.2 | histogram equalization, CLAHE, vì sao làm trên kênh L |
+| `data/split.py` | **1.1** | ★ rò rỉ dữ liệu, StratifiedGroupKFold |
+| `data/transforms.py` | 1.3 | augmentation, vì sao cấm flip ngang và hue |
+| `data/dataset.py` | 1.2, 4.2 | cache, chuẩn hoá, nội suy 48→224 |
+| `models/m1_lenet.py` | 2.1, 2.6 | conv vs fully-connected, 97,3% tham số ở một lớp FC |
+| `models/m2_vggres.py` | **2.2–2.6** | ★ hai conv 3×3, BatchNorm, residual, SpatialDropout, GAP |
+| `models/m3_transfer.py` | **4.1–4.6** | ★ transfer learning, discriminative LR, 2 pha freeze |
+| `engine/losses.py` | 3.1 | cross-entropy, label smoothing |
+| `engine/schedulers.py` | 3.2, 3.3 | Adam vs AdamW, cosine annealing, warmup |
+| `engine/callbacks.py` | 3.4 | early stopping theo macro-F1 |
+| `engine/train.py` | 3.1–3.4, 4.4 | vòng huấn luyện, AMP, grad clip, hai pha |
+| `eval/metrics.py` | **5.1, 5.2** | ★ top-1/top-5, macro-F1 và vì sao nó là chỉ số chính |
+| `eval/stats_tests.py` | **5.3** | ★ McNemar — chênh lệch có thật không |
+| `eval/calibration.py` | 5.4 | ECE, reliability diagram |
+| `eval/confusion.py` | 5.5 | confusion matrix, cặp lớp bị nhầm |
+| `eval/ensemble.py` | **8** | TTA, gộp nhiều model |
+| `robustness/corruptions.py` | **6.1, 6.2** | ★ 5 loại nhiễu, luật chỉ áp lúc test |
+| `robustness/benchmark.py` | 6.3 | relative robustness, mCE |
+| `explain/gradcam.py` | **6.6** | ★ Grad-CAM, công thức và giới hạn |
+| `deploy/speed.py` | **6.4, 6.5** | ★ FLOPs ≠ latency, đo latency cho đúng |
+| `deploy/export.py` | **7** | lượng tử hoá int8, TorchScript, ONNX |
+| `scripts/run_seeds.py` | **9** | vì sao một seed là không đủ |
+
+★ = mục quan trọng nhất, đọc kỹ.
+
+---
+
 ## Phần 0. Bối cảnh bài toán
 
 GTSRB (German Traffic Sign Recognition Benchmark) — 43 lớp, 39.209 ảnh train,
@@ -27,9 +64,11 @@ Vì vậy nhóm đặt câu hỏi khác, bốn câu:
 
 ---
 
-## Phần 1. Dữ liệu  `[A]`
+## Phần 1. Dữ liệu  `Huy`
 
 ### 1.1 Rò rỉ dữ liệu do cấu trúc track — khái niệm quan trọng nhất của phần dữ liệu
+
+> 📁 **Code:** `src/gtsrb/data/split.py` → `make_split()`, `check_leakage()` · test: `tests/test_split.py`
 
 **Trực giác.** GTSRB không chụp mỗi biển báo một lần. Xe chạy tới gần một tấm biển và
 camera quay **30 frame liên tiếp** của *cùng tấm biển vật lý đó*, lưu thành một "track".
@@ -56,6 +95,8 @@ Dấu hiệu nhận biết có rò rỉ: **val cao hơn test** một cách bất
 val và test phải gần nhau, vì cả hai đều là "biển báo chưa từng thấy".
 
 ### 1.2 Histogram equalization và CLAHE
+
+> 📁 **Code:** `src/gtsrb/data/preprocess.py` → `apply_preprocess()`, `crop_roi()`, `resize_image()`
 
 **Trực giác.** Ảnh chụp ngoài đường có cái tối thui, cái cháy sáng. Hai ảnh cùng một biển
 báo nhưng độ sáng khác nhau thì với model là hai đầu vào rất khác. Equalization kéo
@@ -84,6 +125,8 @@ khỏi màu (A,B / U,V) → sửa độ sáng, giữ nguyên màu.
 
 ### 1.3 Augmentation — và hai thứ bị cấm
 
+> 📁 **Code:** `src/gtsrb/data/transforms.py` → `build_transform()` · test: `tests/test_transforms.py`
+
 **Trực giác.** Augmentation dạy model những biến đổi mà **nhãn không đổi**. Xoay biển báo
 15° thì nó vẫn là biển báo đó → model nên bất biến với xoay nhỏ. Đó là cách đưa
 *tri thức tiên nghiệm* (prior) vào mà không cần thêm dữ liệu.
@@ -103,6 +146,8 @@ Dùng mù quáng "bộ augment tiêu chuẩn cho ảnh" là cách tự làm hỏ
 
 ### 1.4 Mất cân bằng lớp
 
+> 📁 **Code:** `src/gtsrb/eval/metrics.py` → `metrics_from_probs()` (macro-F1 là cách nhóm xử lý)
+
 Lớp 2 ("giới hạn 50 km/h") có 2.250 ảnh; lớp 0 ("giới hạn 20"), 19, 37 chỉ có 210.
 Tỉ lệ ~10,7:1. Nhóm **không** resample, vì: (a) phân phối này phản ánh tần suất thật trên
 đường Đức; (b) nhóm đổi **chỉ số** sang macro-F1 thay vì cân bằng lại **dữ liệu** —
@@ -111,9 +156,11 @@ gian: `class_weight` trong cross-entropy, hoặc focal loss.
 
 ---
 
-## Phần 2. Kiến trúc mạng từ số 0  `[B]`
+## Phần 2. Kiến trúc mạng từ số 0  `Hoàng`
 
 ### 2.1 Vì sao conv thay vì fully-connected
+
+> 📁 **Code:** `src/gtsrb/models/m1_lenet.py` → `M1LeNet.__init__()`
 
 Ảnh 48×48×3 = 6.912 giá trị. Một lớp FC 1.000 neuron là ~6,9 triệu tham số **chỉ cho một lớp**.
 Conv giải quyết bằng hai ý tưởng: **kết nối cục bộ** (mỗi neuron chỉ nhìn một ô 3×3 —
@@ -122,6 +169,8 @@ vì "cạnh" là "cạnh" bất kể nó nằm ở đâu). Kết quả: một ke
 64 kênh đầu ra chỉ cần `3·3·32·64 = 18.432` tham số, và nó **bất biến với dịch chuyển**.
 
 ### 2.2 Hai conv 3×3 thay một conv 5×5 — luận điểm của VGG
+
+> 📁 **Code:** `src/gtsrb/models/m2_vggres.py` → `M2VggRes._build_block()`
 
 **Receptive field.** Conv 3×3 thứ nhất: mỗi output nhìn 3×3 input. Conv 3×3 thứ hai:
 mỗi output nhìn 3×3 của tầng trước, mà mỗi cái đó lại nhìn 3×3 → tổng cộng **5×5** input.
@@ -135,6 +184,8 @@ receptive field nhưng hàm biểu diễn được phong phú hơn nhiều. Mộ
 phải là "cách rẻ để làm conv 5×5", nó là **một hàm mạnh hơn**.
 
 ### 2.3 Batch Normalization
+
+> 📁 **Code:** `src/gtsrb/models/m2_vggres.py` → `ResidualBlock.__init__()` (thứ tự Conv→BN→ReLU)
 
 **Công thức** (cho mỗi kênh, trên một mini-batch `B`):
 ```
@@ -159,6 +210,8 @@ vào cách khởi tạo trọng số.
 
 ### 2.4 Residual connection
 
+> 📁 **Code:** `src/gtsrb/models/m2_vggres.py` → `ResidualBlock.forward()` (cộng TRƯỚC, ReLU SAU)
+
 **Vấn đề nó giải quyết — degradation, không phải overfitting.** He et al. 2015 quan sát:
 mạng 56 lớp cho **train error** cao hơn mạng 20 lớp. Train error cao thì không thể là
 overfitting — đó là **không tối ưu hoá được**. Nghịch lý: mạng sâu hơn luôn có thể bắt chước
@@ -181,6 +234,8 @@ kèm stride nếu cần khớp kích thước không gian.
 
 ### 2.5 Dropout và SpatialDropout
 
+> 📁 **Code:** `src/gtsrb/models/m2_vggres.py` → `M2VggRes._build_stages()` (`nn.Dropout2d`)
+
 **Dropout thường** (Srivastava 2014): lúc train, mỗi activation bị zero với xác suất `p`
 độc lập; các activation còn lại được scale `1/(1−p)` (inverted dropout) để kỳ vọng không đổi.
 Lúc test tắt hoàn toàn. Trực giác: mạng không được dựa vào một neuron cụ thể nào →
@@ -199,6 +254,8 @@ Một kênh = một feature detector. Bỏ nó là buộc mạng không được
 kênh hơn, biểu diễn trừu tượng hơn và dễ overfit hơn. `Dropout(0,5)` thường ở ngay trước FC cuối.
 
 ### 2.6 Global Average Pooling
+
+> 📁 **Code:** `src/gtsrb/models/m2_vggres.py` → `M2VggRes._build_head()` · so với `m1_lenet.py` `classifier`
 
 M1 có `Flatten(9216) → FC(256)` = **2.359.552 tham số** ở một lớp duy nhất, tức **97,3%**
 toàn bộ 2.424.299 tham số của model (số đo thật). GAP (Lin et al. 2013, Network-in-Network) thay bằng: lấy trung bình không gian
@@ -219,9 +276,11 @@ M2 **sâu gấp hơn 4 lần mà chỉ bằng ~51% số tham số của M1**. Đ
 
 ---
 
-## Phần 3. Huấn luyện  `[B]`
+## Phần 3. Huấn luyện  `Hoàng`
 
 ### 3.1 Cross-entropy và label smoothing
+
+> 📁 **Code:** `src/gtsrb/engine/losses.py` → `build_criterion()`
 
 **Cross-entropy.** `L = −Σ_k y_k · log p_k`. Với nhãn one-hot thì gọn lại thành
 `L = −log p_c` (c là lớp đúng). Để `L → 0` thì cần `p_c → 1`, mà softmax chỉ đạt được
@@ -278,6 +337,8 @@ kỳ vọng từ bài báo. Nếu đúng, đó là một kết quả đáng báo
 
 ### 3.2 Adam
 
+> 📁 **Code:** `src/gtsrb/engine/schedulers.py` → `build_optimizer()`
+
 Adam giữ hai ước lượng trung bình động: moment 1 (`m_t`, hướng) và moment 2 (`v_t`, độ lớn
 bình phương), rồi bước theo `m̂_t / (√v̂_t + ε)`. Hiệu quả thực tế: mỗi tham số có một
 learning rate thích ứng riêng → ít phải tinh chỉnh LR, hội tụ nhanh ở giai đoạn đầu.
@@ -288,6 +349,8 @@ Trong Adam gốc, weight decay bị chia cho `√v̂` nên tham số có gradien
 không đúng ý nghĩa của regularization.
 
 ### 3.3 Cosine annealing + warmup
+
+> 📁 **Code:** `src/gtsrb/engine/schedulers.py` → `build_scheduler()` → hàm `lr_lambda()` bên trong
 
 ```
 lr_t = lr_min + ½ (lr_max − lr_min) · (1 + cos(π t / T))
@@ -302,6 +365,8 @@ hướng ở đầu có thể phá tri thức pretrained.
 
 ### 3.4 Early stopping theo macro-F1
 
+> 📁 **Code:** `src/gtsrb/engine/callbacks.py` → lớp `EarlyStopping`
+
 Theo dõi **val macro-F1**, patience 10 epoch, lưu checkpoint tốt nhất.
 **Không** theo accuracy — vì mất cân bằng 10,7:1, accuracy có thể gần như không đổi trong
 khi một lớp thưa sập hoàn toàn. Nguyên tắc: *chọn checkpoint theo đúng chỉ số mình thật sự
@@ -309,9 +374,11 @@ quan tâm*. Và tuyệt đối không theo chỉ số trên tập test.
 
 ---
 
-## Phần 4. Transfer learning  `[C]`
+## Phần 4. Transfer learning  `Phong Trần`
 
 ### 4.1 Vì sao tri thức ImageNet dùng được cho biển báo
+
+> 📁 **Code:** `src/gtsrb/models/m3_transfer.py` → `M3Transfer.__init__()` (thay head)
 
 CNN học đặc trưng **có phân tầng**:
 
@@ -325,6 +392,8 @@ ImageNet có 1,28 triệu ảnh. GTSRB có 39 nghìn. Tri thức tầng đầu h
 thứ 39 nghìn ảnh **không học nổi**. Đó là nội dung thực sự được "chuyển giao".
 
 ### 4.2 Vì sao phải upsample lên 224×224
+
+> 📁 **Code:** `src/gtsrb/data/dataset.py` → `GTSRBDataset.__getitem__()` (nội suy) · `explain/gradcam.py` → `feature_map_size()`
 
 ResNet18, MobileNetV2, EfficientNet-B0 đều downsample tổng cộng **32 lần**
 (conv stride 2 + maxpool + các stage stride 2).
@@ -340,6 +409,8 @@ nội dung của ablation resolution.
 
 ### 4.3 Discriminative learning rate
 
+> 📁 **Code:** `src/gtsrb/models/m3_transfer.py` → `M3Transfer.param_groups()`
+
 ```python
 optimizer = AdamW([
     {"params": early,  "lr": 1e-5},   # cạnh/màu — đã tốt sẵn, chỉ nhích nhẹ
@@ -354,6 +425,8 @@ Hai cực đều tệ; discriminative LR là lời giải đúng.
 
 ### 4.4 Hai pha freeze → unfreeze
 
+> 📁 **Code:** `src/gtsrb/models/m3_transfer.py` → `set_backbone_frozen()` · `engine/train.py` → `_run_one_phase()`
+
 *Pha 1 (3 epoch)*: `requires_grad = False` cho backbone, chỉ train head.
 Lý do: head khởi tạo ngẫu nhiên nên loss ban đầu rất lớn (`≈ ln 43 ≈ 3,76`) → gradient rất
 lớn. Nếu backbone đang mở, gradient đó chảy ngược và phá filter pretrained ngay trong vài
@@ -363,6 +436,8 @@ trăm bước đầu, trước khi LR schedule kịp làm gì.
 
 ### 4.5 Chuẩn hoá bằng thống kê ImageNet
 
+> 📁 **Code:** `src/gtsrb/__init__.py` → `IMAGENET_MEAN/STD` · `data/dataset.py` → `_setup_normalizer()`
+
 M3 dùng `mean = (0,485, 0,456, 0,406)`, `std = (0,229, 0,224, 0,225)` — của ImageNet,
 **không** của GTSRB. Hai lý do: (1) filter tầng đầu được tối ưu cho đúng phân phối đầu vào đó;
 (2) `running_mean/running_var` trong các lớp BatchNorm pretrained được tích luỹ trên phân phối
@@ -370,6 +445,8 @@ M3 dùng `mean = (0,485, 0,456, 0,406)`, `std = (0,229, 0,224, 0,225)` — của
 thống kê GTSRB tính **chỉ trên tập train**.
 
 ### 4.6 Ba backbone — ba ý tưởng kiến trúc khác nhau
+
+> 📁 **Code:** `src/gtsrb/models/m3_transfer.py` → hằng `BACKBONES`
 
 | Backbone | #params | FLOPs @224 | Ý tưởng cốt lõi |
 |---|---|---|---|
@@ -381,9 +458,11 @@ So sánh ba cái này làm nổi bật một bài học: **ít FLOPs ≠ nhanh h
 
 ---
 
-## Phần 5. Đánh giá  `[D]`
+## Phần 5. Đánh giá  `Phong Nguyễn`
 
 ### 5.1 Top-1, Top-5 — và tại sao top-5 yếu ở đây
+
+> 📁 **Code:** `src/gtsrb/eval/metrics.py` → `topk_accuracy()`
 
 Top-1: dự đoán có xác suất cao nhất đúng. Top-5: nhãn đúng nằm trong 5 ứng viên cao nhất.
 
@@ -394,6 +473,8 @@ Trên **43 lớp**, top-5 nghĩa là "đúng trong 11,6% số lớp" — mọi m
 nêu rõ giới hạn này và kết luận dựa trên top-1 + macro-F1.
 
 ### 5.2 Macro-F1 — chỉ số chính
+
+> 📁 **Code:** `src/gtsrb/eval/metrics.py` → `metrics_from_probs()` (chú ý tham số `labels=`)
 
 ```
 Precision_k = TP_k / (TP_k + FP_k)        Recall_k = TP_k / (TP_k + FN_k)
@@ -410,6 +491,8 @@ bằng đúng accuracy. **Weighted**-F1 lấy trung bình có trọng số theo 
 chi phối. Nhóm báo cáo cả ba nhưng kết luận theo macro.)
 
 ### 5.3 McNemar test — "chênh lệch này có thật không?"
+
+> 📁 **Code:** `src/gtsrb/eval/stats_tests.py` → `mcnemar()` · test: `tests/test_metrics.py`
 
 Hai model chạy trên **cùng** tập test → quan sát **bắt cặp**, không độc lập → dùng t-test
 hai mẫu độc lập là **sai về mặt thống kê**. McNemar là test đúng cho trường hợp này.
@@ -431,6 +514,8 @@ Nếu `p > 0,05` thì phải nói thẳng "không có ý nghĩa thống kê", v�
 chuyển sang dựa vào tốc độ và robustness — đó là một kết luận **mạnh hơn**, không phải yếu hơn.
 
 ### 5.4 Expected Calibration Error
+
+> 📁 **Code:** `src/gtsrb/eval/calibration.py` → `expected_calibration_error()`, `plot_reliability()`
 
 ```
 ECE = Σ_{m=1}^{M} (|B_m| / n) · | acc(B_m) − conf(B_m) |
@@ -454,6 +539,8 @@ của nhóm thì ngưỡng đó cũng vô nghĩa, nhưng theo chiều khác: nó
 đoán đúng. Cả hai chiều đều hỏng — phải hiệu chỉnh lại trước khi dùng ngưỡng.
 
 ### 5.5 Phân tích per-class và confusion matrix
+
+> 📁 **Code:** `src/gtsrb/eval/confusion.py` → `confusion()`, `top_confusions()`
 
 Accuracy là **một** số. Confusion matrix 43×43 cho biết lỗi **đi đâu**. Hai bức tranh rất
 khác nhau: lỗi rải đều trên mọi lớp, hay lỗi tập trung vào vài **cặp**.
@@ -505,9 +592,11 @@ không phải do thiếu dữ liệu. Nếu lỗi tập trung ở các cặp hì
 
 ---
 
-## Phần 6. Robustness và triển khai biên  `[C] [D]`
+## Phần 6. Robustness và triển khai biên  `Phong Trần` + `Huy`
 
 ### 6.1 Robustness nghĩa là gì — và luật sắt
+
+> 📁 **Code:** `src/gtsrb/robustness/corruptions.py` → `apply_corruption()` · test: `tests/test_corruptions.py`
 
 Robustness = giữ được hiệu năng trên **phân phối chưa từng thấy lúc train**
 (distribution shift). Suy ra **luật sắt**: các loại nhiễu dùng để đo **tuyệt đối không**
@@ -515,6 +604,8 @@ Robustness = giữ được hiệu năng trên **phân phối chưa từng thấ
 chứng minh "model học được cái nó đã thấy" — đó là augmentation, không phải robustness.
 
 ### 6.2 Năm loại nhiễu và mô hình vật lý của chúng
+
+> 📁 **Code:** `src/gtsrb/robustness/corruptions.py` → `motion_blur()`, `gauss_noise()`, `fog()`, `low_light()`, `occlusion()`
 
 | Nhiễu | Mô phỏng tình huống | Mô hình |
 |---|---|---|
@@ -525,6 +616,8 @@ chứng minh "model học được cái nó đã thấy" — đó là augmentati
 | Occlusion | lá cây, sticker, biển bị che | hình chữ nhật che 10/20/30/40/50% diện tích, vị trí ngẫu nhiên |
 
 ### 6.3 Relative robustness — vì sao không chỉ báo accuracy tuyệt đối
+
+> 📁 **Code:** `src/gtsrb/robustness/benchmark.py` → `robustness_sweep()`, `mean_corruption_error()`
 
 ```
 relative_robustness = acc_nhiễu / acc_sạch
@@ -616,6 +709,8 @@ Nhóm đo được điều ngược lại: model **lớn nhất** (M3) lại **h
 
 ### 6.5 Đo latency cho đúng
 
+> 📁 **Code:** `src/gtsrb/deploy/speed.py` → `benchmark()`, `_synchronize()`
+
 | Bước | Vì sao |
 |---|---|
 | `model.eval()` + `torch.no_grad()` | tắt dropout/BN-train và không dựng graph autograd |
@@ -626,6 +721,8 @@ Nhóm đo được điều ngược lại: model **lớn nhất** (M3) lại **h
 | ghi rõ thiết bị + phiên bản thư viện | số latency không so sánh được giữa hai máy khác nhau |
 
 ### 6.6 Grad-CAM
+
+> 📁 **Code:** `src/gtsrb/explain/gradcam.py` → lớp `GradCAM`, các hàm `_forward_backward()`, `_combine_channels()`
 
 ```
 α_k^c = (1/Z) Σ_i Σ_j  ∂y^c / ∂A^k_{ij}            # trọng số của kênh k cho lớp c
@@ -667,3 +764,167 @@ ngữ nghĩa thấp hơn. Đó là một đánh đổi thật, không phải l�
 
 **Trong bài này**, 3 nhóm ảnh cho mỗi model: (a) đúng, (b) **sai — model nhìn vào đâu**,
 (c) cùng ảnh trước/sau nhiễu — attention có trôi không.
+
+---
+
+## Phần 7. Nén model cho thiết bị biên  `Phong Trần`
+
+> 📁 **Code:** `src/gtsrb/deploy/export.py` → `quantize_dynamic()`, `quantize_static()`, `export_onnx()` · test: `tests/test_export.py`
+
+### 7.1 Vì sao phải nén
+
+Đo latency của model fp32 mới là một nửa câu chuyện. Thiết bị biên thật — Raspberry Pi,
+Jetson, vi điều khiển trên xe — hiếm khi chạy fp32, vì ba lý do:
+
+- **nhẹ hơn 4 lần** trên đĩa và trong RAM;
+- nhiều chip có **lệnh SIMD int8 chuyên dụng** nên tính nhanh hơn;
+- tốn **ít băng thông bộ nhớ** hơn — mà băng thông mới là nút cổ chai thật (mục 6.4).
+
+### 7.2 Hai kiểu lượng tử hoá
+
+**Trực giác chung.** Số thực 32 bit có dải rất rộng, nhưng trọng số của một mạng đã train
+thường nằm gọn trong khoảng nhỏ, ví dụ `[-0,8; 0,8]`. Ta có thể chia khoảng đó thành 256
+mức và chỉ lưu *chỉ số mức* (1 byte) thay vì số thực (4 byte). Đó là lượng tử hoá.
+
+```
+giá trị thật  ≈  scale × (số_nguyên_int8 − zero_point)
+```
+
+`scale` và `zero_point` là hai số thực lưu kèm cho mỗi tensor (hoặc mỗi kênh).
+
+| | Dynamic | Static |
+|---|---|---|
+| Lượng tử hoá gì | **chỉ trọng số** Linear | **trọng số + activation**, cả Conv |
+| Cần dữ liệu hiệu chuẩn | không | **có** — chạy vài trăm ảnh thật để đo dải activation |
+| Lợi ích chính | giảm **dung lượng** | giảm dung lượng **và tăng tốc** |
+| Dùng khi | muốn nhanh gọn | làm sản phẩm thật |
+
+### 7.3 ★ Kết quả đo thật — kiến trúc quyết định nén có hiệu quả không
+
+| Model | fp32 | int8 dynamic | Nhẹ hơn |
+|---|---|---|---|
+| M1 LeNet | 9,70 MB | 2,59 MB | **3,75×** |
+| M2 VGG-res | 4,99 MB | 4,95 MB | **1,0×** (không giảm) |
+
+**Vì sao chênh nhau đến thế?** Dynamic quantization chỉ đụng tới lớp `Linear`.
+M1 có **97,3%** tham số ở một lớp Linear nên nó hưởng trọn lợi ích. M2 dùng Global
+Average Pooling nên Linear chỉ còn **11.051** tham số — gần như không có gì để nén.
+
+→ **Bài học: quyết định kiến trúc (mục 2.6) ảnh hưởng tới cả khả năng nén sau này.**
+
+Với M1, so sánh đầy đủ ba biến thể:
+
+| Biến thể | MB | Top-1 | p50 | Nhẹ hơn | Nhanh hơn | **Mất top-1** |
+|---|---|---|---|---|---|---|
+| fp32 | 9,70 | 0,98167 | 1,04 ms | — | — | — |
+| int8 dynamic | 2,59 | 0,98167 | 1,03 ms | 3,75× | 1,01× | **0,000** |
+| int8 static | 2,43 | 0,98000 | 0,80 ms | 3,99× | **1,30×** | **0,167** |
+
+Dynamic nhẹ đi 3,75 lần mà **không mất điểm nào**, nhưng cũng **không nhanh hơn**.
+Static mới nhanh hơn thật (1,3 lần), nhưng **trả giá 0,167 điểm**.
+
+> **Khi báo cáo phải có cột "mất top-1".** Nói "nhẹ hơn 4 lần" mà không nói mất bao
+> nhiêu accuracy là báo cáo thiếu trung thực — người đọc sẽ tưởng nén là bữa trưa miễn phí.
+
+### 7.4 TorchScript và ONNX — khác lượng tử hoá
+
+Hai thứ này **không nén**; chúng tách model ra khỏi mã Python để chạy được trên
+C++ runtime, ONNX Runtime, TensorRT, CoreML. Cần thiết vì thiết bị biên thường
+không có Python.
+
+> ⚠️ **Bẫy đã gặp thật:** bộ xuất ONNX mới của PyTorch mặc định tách trọng số ra file
+> riêng `<tên>.onnx.data`, file `.onnx` còn lại chỉ ~3 KB. Copy mỗi file `.onnx` sang
+> thiết bị là model **không chạy được**, và lỗi lúc nạp không nói là thiếu file.
+> Hàm `export_onnx()` của nhóm ép gộp một file và báo đúng dung lượng.
+
+> ⚠️ **Luôn gọi `verify_onnx()` sau khi xuất.** Xuất thành công không có nghĩa là xuất
+> đúng — một số phép toán bị dịch sai hoặc bị xấp xỉ, và sai lệch chỉ lộ ra khi so
+> output thật. Nhóm đo được sai lệch 8,34e-07, tức khớp.
+
+---
+
+## Phần 8. TTA và ensemble  `Phong Nguyễn`
+
+> 📁 **Code:** `src/gtsrb/eval/ensemble.py` → `predict_tta()`, `ensemble_probs()`, `disagreement_rate()` · test: `tests/test_ensemble.py`
+
+### 8.1 Vì sao phần này liên quan trực tiếp tới GTSRB
+
+Bài **thắng giải IJCNN 2011 trên chính bộ dữ liệu này** (IDSIA, 99,46%) là một
+*committee of CNNs* — tức ensemble. Nên đây không phải kỹ thuật phụ: nó chính là cách
+người ta đạt SOTA trên bài toán này.
+
+### 8.2 Hai kỹ thuật
+
+**TTA (test-time augmentation).** Một model, chạy nhiều lần trên các biến thể của
+**cùng một ảnh** (xoay nhẹ, zoom nhẹ), rồi lấy trung bình xác suất.
+*Trực giác:* nếu model chỉ đúng nhờ một góc nhìn may mắn, lấy trung bình nhiều góc sẽ
+lộ ra sự thiếu chắc chắn đó. Không cần train thêm, nhưng **latency nhân lên đúng số
+biến thể**.
+
+**Ensemble.** Nhiều model khác nhau, mỗi model chạy một lần, rồi gộp xác suất.
+*Trực giác:* các model mắc lỗi ở **những chỗ khác nhau**; gộp lại thì lỗi riêng của
+từng model bị đa số lấn át. Latency bằng **tổng** các model.
+
+**Gộp bằng trung bình XÁC SUẤT, không phải trung bình logit.** Logit không cùng thang
+đo giữa các model, trung bình chúng là phép toán không có nghĩa thống kê. Trung bình
+xác suất thì vẫn là một phân phối hợp lệ.
+
+### 8.3 Khi nào ensemble đáng làm
+
+Chỉ khi các thành phần **mắc lỗi khác nhau**. Hàm `disagreement_rate()` đo điều đó:
+tỉ lệ ảnh mà các model không đồng ý về nhãn. Nếu gần 0 thì các model về cơ bản giống
+hệt nhau — gộp lại không được gì mà latency vẫn nhân lên.
+
+Số đo của nhóm (M1 + M2, trên một phần tập test):
+
+| | macro-F1 |
+|---|---|
+| M1 đơn lẻ | 0,97857 |
+| M2 đơn lẻ | 0,98219 |
+| **Ensemble 2 model** | **0,98477** (+0,00258) |
+
+Tỉ lệ bất đồng: **1,76%** — đủ khác nhau để ensemble có lợi, nhưng lợi ích nhỏ.
+TTA trên riêng M2: 0,9822 → 0,9834 (+0,0012) với latency **nhân 3**.
+
+> **Phải nói ra cái giá.** Cả hai kỹ thuật đều đánh đổi latency lấy accuracy. Với bài
+> triển khai biên — mà cả dự án này hướng tới — đó thường là đánh đổi **sai chiều**.
+
+### 8.4 ★ Cấm flip ngang trong TTA
+
+Giống hệt lý do ở mục 1.3: lật ngang biến lớp 33 "rẽ phải" thành đúng hình lớp 34
+"rẽ trái". TTA có flip sẽ **trung bình xác suất của hai lớp khác nhau** — làm accuracy
+**tệ đi**, không phải tốt lên.
+
+---
+
+## Phần 9. Vì sao một seed là không đủ  `Hoàng`
+
+> 📁 **Code:** `scripts/run_seeds.py` → `summarise()`, `report_separability()`
+
+### 9.1 Hai loại phương sai khác nhau
+
+| Loại | Nguồn | Xử lý bằng |
+|---|---|---|
+| **Trong một lần chạy** | hai model đoán khác nhau trên cùng tập test | **McNemar** (mục 5.3) |
+| **Giữa các lần chạy** | khởi tạo trọng số, thứ tự shuffle, augmentation ngẫu nhiên | **nhiều seed** |
+
+McNemar xử lý loại thứ nhất rất tốt. Nhưng nó **hoàn toàn không nói gì** về loại thứ
+hai. Train lại cùng model với seed khác sẽ ra một model khác, và chênh lệch giữa hai
+lần chạy đó có thể lớn hơn chênh lệch giữa hai *kiến trúc*.
+
+### 9.2 Quy tắc phát biểu kết quả
+
+```
+chênh lệch giữa hai model  >  2 × độ lệch chuẩn giữa các seed   ->  kết luận được
+chênh lệch                 ≤  2 × độ lệch chuẩn                 ->  "nằm trong nhiễu"
+```
+
+Hàm `report_separability()` tự in ra kết luận này cho từng cặp model.
+
+### 9.3 Vì sao dự án này cần nó
+
+M2 và ResNet18 chênh nhau **9 ảnh trên 12.630**. McNemar nói p = 0,4477 (tương đương).
+Nhưng ngay cả khi p < 0,05, ta vẫn chưa biết kết quả có lặp lại với seed khác không.
+
+Nhóm hiện mới chạy **một seed** mỗi cấu hình — đó là hạn chế lớn nhất về phương pháp,
+và đã ghi rõ ở `docs/BAO_CAO.md` mục 5. Chạy `make seeds` để bổ sung.

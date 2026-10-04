@@ -41,11 +41,11 @@ train lại. Chi tiết: [docs/KE_HOACH_CHAY.md](docs/KE_HOACH_CHAY.md) mục 2.
 
 | Bạn là | Đọc theo thứ tự |
 |---|---|
-| **Thành viên mới vào nhóm** | 1. [docs/PHAN_CONG.md](docs/PHAN_CONG.md) → mục của bạn · 2. [docs/INTERFACE.md](docs/INTERFACE.md) → hợp đồng code · 3. [docs/LY_THUYET.md](docs/LY_THUYET.md) → phần của bạn |
+| **Thành viên mới vào nhóm** | 1. [docs/PHAN_CONG.md](docs/PHAN_CONG.md) → mục của bạn · 2. [docs/LY_THUYET.md](docs/LY_THUYET.md) → bảng *"mở file code nào thì đọc mục nào"* ở đầu · 3. [docs/INTERFACE.md](docs/INTERFACE.md) → hợp đồng code |
 | **Muốn hiểu code** | đọc thẳng `src/gtsrb/` — mỗi file mở đầu bằng docstring giải thích **vì sao** thiết kế như vậy, không chỉ *làm gì* |
-| **Chuẩn bị bảo vệ** | [docs/LY_THUYET.md](docs/LY_THUYET.md) đọc hết → [docs/QA_GIANG_VIEN.md](docs/QA_GIANG_VIEN.md) → 10 câu của bạn ở cuối mục trong PHAN_CONG.md |
+| **Muốn hiểu lý thuyết** | [docs/LY_THUYET.md](docs/LY_THUYET.md) — 9 phần, mỗi mục có dòng `📁 Code:` trỏ thẳng tới file/hàm hiện thực nó |
 | **Sắp chạy thực nghiệm** | [docs/KE_HOACH_CHAY.md](docs/KE_HOACH_CHAY.md) — thời gian đo thật + 4 cách tiết kiệm compute |
-| **Gặp lỗi lạ** | [docs/SU_CO.md](docs/SU_CO.md) — 7 nhóm sự cố **đã gặp thật**, đọc trước tiết kiệm vài giờ |
+| **Gặp lỗi lạ** | [docs/SU_CO.md](docs/SU_CO.md) — 9 nhóm sự cố **đã gặp thật**, đọc trước tiết kiệm vài giờ |
 | **Muốn xem kết quả** | [docs/KET_QUA.md](docs/KET_QUA.md) |
 
 ---
@@ -166,13 +166,13 @@ src/gtsrb/          thư viện dùng chung — mỗi file ghi CHỦ ở đầu 
 ├── eval/           [Phong Nguyễn] metrics, confusion, stats_tests (McNemar), calibration
 ├── robustness/     [Huy]          corruptions (5 loại × 5 mức), benchmark
 ├── explain/        [Phong Trần]   gradcam
-├── deploy/         [Phong Trần]   speed (latency p50/p95, FLOPs)
+├── deploy/         [Phong Trần]   speed (latency p50/p95, FLOPs), export (int8, ONNX)
 └── utils/          [Huy]          seed, config, logging
 
 scripts/            CLI, mỗi việc một lệnh (_common.py gom logic dùng chung)
 configs/            YAML — MỌI siêu tham số ở đây, không hard-code
 notebooks/          00 = train trên Colab · 01..09 = mỗi người một notebook
-tests/              92 test; đặc biệt test_split.py chặn rò rỉ dữ liệu
+tests/              109 test; đặc biệt test_split.py chặn rò rỉ dữ liệu
 docs/               phân công, interface, lý thuyết, Q&A, sự cố, kết quả
 reports/            bảng + hình cho báo cáo
 artifacts/runs/     checkpoint + result.json mỗi run (không commit)
