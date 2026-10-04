@@ -6,8 +6,10 @@ artifacts/
 # Log của các lần chạy — mỗi máy một khác, không ai cần log của người khác
 logs/
 
-# File đóng gói để upload Colab — sinh lại bằng `make zip`
-gtsrb_code.zip
+# Mọi file nén — đều là thứ sinh lại được hoặc tải về được, không commit.
+# Trước đây chỉ chặn đúng tên gtsrb_code.zip, nên m3_runs.zip (62 MB kết quả
+# tải từ Colab) lọt qua và nằm trong dự án mà không ai để ý.
+*.zip
 *.pt
 *.pth
 *.onnx
