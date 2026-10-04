@@ -27,6 +27,26 @@ CHỦ: Phong Trần
   6. Ghi rõ THIẾT BỊ và PHIÊN BẢN thư viện
      Số latency không so sánh được giữa hai máy khác nhau.
 
+  7. ★ MÁY PHẢI RẢNH — quy tắc này đã bị vi phạm thật trong dự án ★
+     Chạy edge_export song song với run_robustness làm MỌI model chậm
+     1,3-2,3 lần, và không có gì báo động:
+
+       model            p50 máy rảnh   p50 máy bận   p95/p50 rảnh   p95/p50 bận
+       m1_lenet              0,95 ms       2,16 ms           1,34          3,71
+       m2_vggres             3,22 ms       4,12 ms           1,12          1,33
+       m3_resnet18          15,62 ms      21,67 ms           1,07          1,26
+       m3_mobilenetv2       35,94 ms      58,56 ms           1,04          1,24
+       m3_effnetb0         163,85 ms     272,17 ms           1,05          1,08
+
+     Model càng NHANH càng bị méo nặng: kernel của M1 ngắn hơn một lát
+     scheduler, nên nhiễu hệ điều hành chiếm phần lớn thời gian đo. Đúng
+     những model nhẹ — thứ ta muốn chọn cho thiết bị biên — lại là thứ bị
+     đo sai nhiều nhất.
+
+     Tỉ lệ p95/p50 là DẤU HIỆU TỰ PHÁT HIỆN: máy rảnh cho 1,0-1,4; vượt
+     2,0 thì gần như chắc chắn có tiến trình khác tranh CPU. benchmark()
+     tự kiểm và cảnh báo (xem `nhieu_he_thong` trong kết quả).
+
 ★ FLOPs KHÔNG PHẢI LATENCY — bài học quan trọng nhất của phần này ★
 
   SỐ ĐO THẬT của dự án (CPU, batch=1, M1 Pro):
@@ -84,6 +104,52 @@ def _synchronize(device: torch.device) -> None:
     # CPU thì đồng bộ sẵn, không cần làm gì
 
 
+# ---------------------------------------------------------------------
+# Hai dấu hiệu "máy đang bận", vì MỘT dấu hiệu là không đủ
+# ---------------------------------------------------------------------
+# Đo trên chính 5 model của bài, máy rảnh so với máy bận:
+#
+#   model            chậm hơn   p95/p50 rảnh -> bận
+#   m1_lenet            2,27x       1,34 -> 3,71   jitter BẮT ĐƯỢC
+#   m2_vggres           1,28x       1,12 -> 1,33   jitter bỏ sót
+#   m3_resnet18         1,39x       1,07 -> 1,26   jitter bỏ sót
+#   m3_mobilenetv2      1,63x       1,04 -> 1,24   jitter bỏ sót
+#   m3_effnetb0         1,66x       1,05 -> 1,08   jitter bỏ sót
+#
+# jitter chỉ bắt được model NHANH: kernel của M1 ngắn hơn một lát scheduler
+# nên nhiễu hệ điều hành lộ ra ở đuôi phân phối. Với model chậm, nhiễu rải
+# đều trên một kernel dài nên p50 và p95 cùng giãn ra — tỉ lệ không đổi, dù
+# số tuyệt đối sai 66%.
+#
+# Vì vậy phải kiểm thêm TẢI HỆ THỐNG, dấu hiệu không phụ thuộc model chạy
+# nhanh hay chậm. Hai dấu hiệu bù cho nhau: jitter nhạy với model nhanh,
+# tải hệ thống nhạy với mọi model nhưng thô hơn.
+NGUONG_JITTER = 2.0
+# Trừ 1,0 cho chính tiến trình benchmark, rồi chia cho số lõi. Lúc chạy
+# edge_export song song robustness, tải đo được ~4,5 trên 10 lõi -> 0,35.
+NGUONG_TAI_MOI_LOI = 0.25
+
+
+def _tai_moi_loi() -> float | None:
+    """Tải trung bình 1 phút trên mỗi lõi, đã TRỪ phần của chính benchmark."""
+    try:
+        import os
+        loi = os.cpu_count() or 1
+        return max(0.0, os.getloadavg()[0] - 1.0) / loi
+    except (OSError, AttributeError):
+        return None
+
+
+def _tai_he_thong() -> str:
+    """Chuỗi tải hệ thống để ghi vào cảnh báo."""
+    try:
+        import os
+        tai, loi = os.getloadavg()[0], os.cpu_count() or 1
+        return f"{tai:.1f} trên {loi} lõi = {tai / loi:.2f}/lõi"
+    except (OSError, AttributeError):
+        return "không đọc được"
+
+
 @torch.no_grad()
 def benchmark(model: nn.Module, img_size: int, device: torch.device,
               batch_sizes: tuple[int, ...] = (1, 64),
@@ -118,9 +184,25 @@ def benchmark(model: nn.Module, img_size: int, device: torch.device,
         results[f"{prefix}_imgs_per_sec"] = float(
             batch_size / (np.percentile(array, 50) / 1000.0))
 
-        log.info("  %-14s p50=%7.2f ms  p95=%7.2f ms  (%.0f ảnh/s)",
-                 prefix, results[f"{prefix}_p50"], results[f"{prefix}_p95"],
-                 results[f"{prefix}_imgs_per_sec"])
+        # ---- Tự phát hiện máy đang BẬN (xem quy tắc 7 ở đầu file) ----
+        p50, p95 = results[f"{prefix}_p50"], results[f"{prefix}_p95"]
+        jitter = p95 / p50 if p50 > 0 else 0.0
+        results[f"{prefix}_jitter"] = round(jitter, 2)
+
+        log.info("  %-14s p50=%7.2f ms  p95=%7.2f ms  (%.0f ảnh/s)  p95/p50=%.2f",
+                 prefix, p50, p95, results[f"{prefix}_imgs_per_sec"], jitter)
+        tai = _tai_moi_loi()
+        ly_do = []
+        if jitter > NGUONG_JITTER:
+            ly_do.append(f"p95/p50 = {jitter:.2f} > {NGUONG_JITTER:.1f}")
+        if tai is not None and tai > NGUONG_TAI_MOI_LOI:
+            ly_do.append(f"tải {tai:.2f}/lõi > {NGUONG_TAI_MOI_LOI:.2f}")
+        if ly_do:
+            log.warning("  ★ MÁY ĐANG BẬN (%s) — số latency này có thể chậm "
+                        "1,3-2,3 lần so với thực tế. Đóng các việc nặng khác rồi "
+                        "ĐO LẠI. (tải hệ thống: %s)",
+                        " · ".join(ly_do), _tai_he_thong())
+            results[f"{prefix}_nhieu_he_thong"] = True
 
     return results
 
