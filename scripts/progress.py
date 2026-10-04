@@ -62,23 +62,52 @@ def read_log() -> list[str]:
 
 
 def parse_steps(lines: list[str]) -> dict:
-    """Từ _all.log suy ra: bước nào đã xong, bước nào đang chạy, bắt đầu lúc nào."""
-    state = {}
+    """Từ _all.log suy ra: bước nào đã xong, bỏ qua, hay đang chạy.
+
+    Mỗi bước mở đầu bằng một dòng `[hh:mm] n/5 TÊN`. Bước đó kết thúc theo
+    MỘT TRONG BA cách, và phải nhận cả ba, không thì bước bị treo ở trạng
+    thái "đang chạy" mãi và ETA cộng thêm thời gian của một việc đã xong:
+
+      `-> mã thoát 0`   bước chạy xong bình thường
+      `HOÀN TẤT`        dòng cuối mẻ — bước CUỐI chỉ kết thúc bằng dòng này
+      `BỎ QUA`          bước bị SKIP_HEAVY=1 bỏ, nằm ngay trên cùng dòng mở
+
+    LỖI ĐÃ GẶP: so chuỗi "bỏ qua" chữ thường trong khi log ghi "BỎ QUA"
+    chữ hoa, nên hai bước đẩy lên Colab vẫn tính là đang chạy; cộng với
+    bước cuối không có "mã thoát", ETA báo còn 6h42m sau khi mẻ đã xong.
+    """
+    state: dict[str, dict] = {}
+    running: str | None = None          # bước đang mở, để gán dòng kết thúc
+
+    def close(step: str | None, when: str) -> None:
+        if step and step in state:
+            state[step]["running"] = False
+            state[step].setdefault("end", when)
+
     for line in lines:
         m = re.match(r"\[(\d\d:\d\d)\]\s+(\d/5)\s+(.*)", line)
         if m:
-            when, step, _ = m.groups()
-            state.setdefault(step, {})["start"] = when
-            state[step]["running"] = True
+            when, step, rest = m.groups()
+            close(running, when)        # bước trước chưa đóng thì đóng tại đây
+            if "BỎ QUA" in rest.upper():
+                state[step] = {"skipped": True, "running": False, "end": when}
+                running = None
+            else:
+                state[step] = {"start": when, "running": True}
+                running = step
+            continue
+
         m2 = re.match(r"\[(\d\d:\d\d)\]\s+-> mã thoát", line)
-        if m2 and state:
-            last = list(state)[-1]
-            state[last]["running"] = False
-            state[last]["end"] = m2.group(1)
-        if "bỏ qua" in line:
-            m3 = re.search(r"(\d/5)", line)
-            if m3:
-                state[m3.group(1)] = {"skipped": True, "running": False}
+        if m2:
+            close(running, m2.group(1))
+            running = None
+            continue
+
+        m3 = re.match(r"\[(\d\d:\d\d)\].*HOÀN TẤT", line)
+        if m3:
+            close(running, m3.group(1))
+            running = None
+
     return state
 
 
@@ -189,7 +218,7 @@ def render() -> str:
     for key, name, est in STEPS:
         info = state.get(key, {})
         if info.get("skipped"):
-            mark, extra = c(DIM, "–"), c(DIM, "bỏ qua (đã có)")
+            mark, extra = c(DIM, "–"), c(DIM, "bỏ qua (chạy trên Colab)")
         elif info.get("running"):
             mark = c(CYAN, "▶")
             start = info.get("start", "")
@@ -198,9 +227,6 @@ def render() -> str:
         elif "start" in info:
             mark = c(GREEN, "✓")
             extra = c(DIM, f"xong {info.get('end','?')}")
-        elif "BỎ QUA" in "\n".join(log_lines) and key in "\n".join(
-                l for l in log_lines if "BỎ QUA" in l):
-            mark, extra = c(DIM, "–"), c(DIM, "bỏ qua (chạy trên Colab)")
         else:
             mark, extra = c(DIM, " "), c(DIM, "chờ")
             remaining_min += est
@@ -239,13 +265,14 @@ def render() -> str:
     lines.append(f"  {c(BOLD,'HỆ THỐNG')}  nguồn {power} · caffeinate {caff} · mẻ {alive}")
     lines.append(f"            CPU {info['cpu']:.0f}% · RAM {info['ram_gb']:.1f} GB")
 
-    if remaining_min:
+    all_done = (ROOT / "logs/.ALL_DONE").exists()
+    if remaining_min and not all_done:
         finish = now + timedelta(minutes=remaining_min)
         lines.append("")
         lines.append(f"  {c(BOLD,'DỰ KIẾN XONG')}  ~{finish.strftime('%H:%M')} "
                      f"{c(DIM, f'(còn ~{remaining_min//60}h{remaining_min%60:02d}m)')}")
 
-    if (ROOT / "logs/.ALL_DONE").exists():
+    if all_done:
         lines.append("")
         lines.append(c(GREEN, "  ★ HOÀN TẤT — xem docs/BAO_CAO.md và docs/KET_QUA.md"))
 
