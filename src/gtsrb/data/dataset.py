@@ -62,6 +62,7 @@ class GTSRBDataset(Dataset):
                  split: str = "train",
                  img_size: int = 48,
                  preprocess: str = "clahe",
+                 aug_after_resize: bool = False,
                  normalize: str = "gtsrb",
                  mean: tuple[float, ...] | None = None,
                  std: tuple[float, ...] | None = None,
@@ -75,6 +76,7 @@ class GTSRBDataset(Dataset):
         self.split = split
         self.img_size = img_size
         self.preprocess = preprocess
+        self.aug_after_resize = bool(aug_after_resize)
         self.transform = transform
         self.return_uint8 = return_uint8   # True khi cần ảnh thô (Grad-CAM, robustness)
 
@@ -206,18 +208,35 @@ class GTSRBDataset(Dataset):
         # HWC -> CHW. torchvision v2 làm việc trên tensor CHW.
         tensor = torch.from_numpy(np.ascontiguousarray(image)).permute(2, 0, 1)
 
-        # Augmentation (chỉ train). Làm ở ĐỘ PHÂN GIẢI CACHE để rẻ hơn,
-        # rồi mới resize lên img_size.
-        if self.transform is not None:
-            tensor = self.transform(tensor)
-
-        # Resize về img_size nếu cache khác size (trường hợp M3: 48 -> 224)
-        if tensor.shape[-1] != self.img_size:
-            tensor = F.interpolate(
-                tensor.unsqueeze(0).float(),
+        def _resize(t: torch.Tensor) -> torch.Tensor:
+            """Nội suy lên img_size nếu cache khác size (M3: 48 -> 224)."""
+            if t.shape[-1] == self.img_size:
+                return t
+            return F.interpolate(
+                t.unsqueeze(0).float(),
                 size=(self.img_size, self.img_size),
                 mode="bilinear", align_corners=False,
             ).squeeze(0).clamp(0, 255).to(torch.uint8)
+
+        # Augmentation (chỉ train). Mặc định làm ở ĐỘ PHÂN GIẢI CACHE để rẻ hơn.
+        #
+        # ★ VÌ SAO CÓ CỜ `aug_after_resize` ★
+        # Với M3 (cache 48, img_size 224), augment TRƯỚC resize nghĩa là ảnh bị
+        # LẤY MẪU LẠI HAI LẦN: một lần khi quay/dịch ở 48px, một lần khi nội suy
+        # lên 224px. M1/M2 chỉ bị một lần vì cache khớp img_size. Tức đường ống
+        # mặc định bất lợi cho M3 — đúng nhóm mô hình mà kết luận chính nói là
+        # "không giúp được gì". Cờ này để ĐO xem bất lợi đó lớn bao nhiêu.
+        #
+        # Augment SAU resize đắt hơn (xoay ảnh 224x224 thay vì 48x48) nên không
+        # đặt làm mặc định; nó là nhánh đối chứng.
+        if self.aug_after_resize:
+            tensor = _resize(tensor)
+            if self.transform is not None:
+                tensor = self.transform(tensor)
+        else:
+            if self.transform is not None:
+                tensor = self.transform(tensor)
+            tensor = _resize(tensor)
 
         if self.return_uint8:
             return tensor, label                          # CHW uint8, cho Grad-CAM/robustness
@@ -250,6 +269,7 @@ def build_dataloaders(cfg) -> dict[str, DataLoader]:
         std=data_cfg.get("std"),
         processed_dir=data_cfg.get("processed_dir", "data/processed"),
         cache_size=data_cfg.get("cache_size"),
+        aug_after_resize=data_cfg.get("aug_after_resize", False),
     )
 
     loaders: dict[str, DataLoader] = {}

@@ -403,6 +403,101 @@ def phu_luc_tai_lieu() -> str:
     return "\n".join(dong)
 
 
+def _khoang_cach_m2(hieu_ung_duong_ong: float) -> str:
+    """Khoảng cách M2 vs các backbone nó THẮNG, so với cỡ hiệu ứng đường ống.
+
+    Hai số này từng viết cứng là "0,41 và 0,84 điểm" — số thật là 0,42 và 0,84.
+    Tỉ số tính từ bảng thì phải sinh từ bảng, đúng như mọi chỗ khác trong file.
+    """
+    main, mc = read_main(), read("mcnemar.csv")
+    if main is None or mc is None:
+        return ""
+    diem = main.set_index("model")["test_macro_f1"].to_dict()
+    if "m2_vggres" not in diem:
+        return ""
+    thua = []
+    for r in mc.itertuples():
+        a, b = r.model_a, r.model_b
+        if r.better == "A" and a == "m2_vggres" and b.startswith("m3_"):
+            thua.append(b)
+        elif r.better == "B" and b == "m2_vggres" and a.startswith("m3_"):
+            thua.append(a)
+    if not thua:
+        return ""
+    cach = {t: (diem["m2_vggres"] - diem[t]) * 100 for t in thua if t in diem}
+    ta = ", ".join(f"`{t}` **{v:.2f} điểm**" for t, v in
+                   sorted(cach.items(), key=lambda kv: -kv[1]))
+    nho_nhat = min(cach.values())
+    return ("Điều có thể nói chắc: **cả hai lựa chọn đường ống đều không giải "
+            f"thích được khoảng cách giữa M2 và các backbone pretrained.** M2 "
+            f"hơn {ta} macro-F1, đều với p < 1e-6. Hiệu ứng đường ống lớn nhất "
+            f"đo được là {abs(hieu_ung_duong_ong):.2f} điểm và **không có ý "
+            f"nghĩa thống kê** — nhỏ hơn cả khoảng cách hẹp nhất "
+            f"({nho_nhat:.2f} điểm) trong các cặp đó.")
+
+
+def thu_tu_augment() -> str:
+    """Phép đo đối chứng thứ hai: augment TRƯỚC hay SAU khi nội suy.
+
+    Mặc định augment ở độ phân giải cache (48) rồi mới nội suy lên img_size —
+    tối ưu tốc độ. Với M3 (cache 48, img_size 224) nó khiến ảnh bị LẤY MẪU LẠI
+    HAI LẦN, còn M1/M2 chỉ một lần vì cache khớp img_size. Tức đường ống mặc
+    định bất lợi cho đúng nhóm mô hình mà kết luận chính nói là "không giúp".
+    """
+    frame = read("ablation.csv")
+    if frame is None or "tag" not in frame.columns:
+        return ""
+    g = frame[frame["tag"].astype(str).str.contains("res112", na=False)]
+    sau = g[g["tag"].astype(str).str.contains("augafter")]
+    goc = g[g["tag"].astype(str).str.fullmatch(r"resolution-res112-budget")]
+    if sau.empty or goc.empty:
+        return ""
+    a, b = sau.iloc[0], goc.iloc[0]
+    dv = (a["val_macro_f1"] - b["val_macro_f1"]) * 100
+    dt = (a["test_macro_f1"] - b["test_macro_f1"]) * 100
+    seed = read("seeds.csv")
+    nguong = ((seed["macro_f1"].max() - seed["macro_f1"].min()) * 100
+              if seed is not None and len(seed) > 1 else 0.5)
+    ty = max(abs(dv), abs(dt)) / nguong * 100
+
+    ket = (f"**{ty:.0f}% dải nhiễu** — gợi ý nhưng **chưa chứng minh được** "
+           f"từ một seed" if ty > 40 else
+           f"chỉ **{ty:.0f}% dải nhiễu** — không ảnh hưởng")
+
+    return "\n".join([
+        "", "#### Phép đo đối chứng thứ hai: thứ tự augmentation", "",
+        "Mặc định, augmentation được áp ở **độ phân giải cache (48 px)** rồi mới "
+        "nội suy lên `img_size` — tối ưu tốc độ, vì xoay ảnh 48×48 rẻ hơn xoay "
+        "224×224. Nhưng với M3 điều đó khiến ảnh bị **lấy mẫu lại hai lần** "
+        "(một lần lúc xoay/dịch ở 48 px, một lần lúc nội suy lên), còn M1/M2 "
+        "chỉ bị một lần vì cache khớp `img_size`.",
+        "",
+        "Lại là một yếu tố bất lợi cho đúng nhóm mô hình mà kết luận chính nói "
+        "là \"không giúp được gì\". Nhóm thêm cờ `data.aug_after_resize` để đo:",
+        "",
+        "| Thứ tự (ResNet18 @112 px, cache 48) | val macro-F1 | test macro-F1 |",
+        "|---|---|---|",
+        f"| augment **trước** nội suy (mặc định) | {b['val_macro_f1']:.5f} | "
+        f"{b['test_macro_f1']:.5f} |",
+        f"| augment **sau** nội suy | {a['val_macro_f1']:.5f} | "
+        f"{a['test_macro_f1']:.5f} |",
+        f"| chênh | **{dv:+.2f} điểm** | **{dt:+.2f} điểm** |",
+        "",
+        f"Chênh lệch **đúng chiều dự đoán** (augment sau có lợi cho M3), nhưng "
+        f"bằng {ket} — dải nhiễu seed là {nguong:.2f} điểm (mục 3.5.2).",
+        "",
+        "**Phải nói cho đúng mức chắc chắn:** đây là hai phép đo khác nhau về "
+        "tính dứt khoát. Thí nghiệm cache ở trên chênh 0,03 điểm "
+        f"(~6% dải nhiễu) nên kết luận được là *không ảnh hưởng*. Thí nghiệm này "
+        f"chênh {abs(dt):.2f} điểm ({ty:.0f}% dải nhiễu) nên **chỉ kết luận "
+        f"được là không có bằng chứng ở một seed** — không phải là *không có "
+        f"hiệu ứng*. Muốn chốt thì cần 3 seed cho mỗi nhánh (~2 giờ máy), và "
+        "đó là hướng mở rộng ưu tiên cao nhất của phần này.",
+        "",
+        _khoang_cach_m2(dt),
+    ])
+
+
 def truc_do_phan_giai() -> str:
     """Trục `resolution` đo GÌ — và phép đo đối chứng chứng minh điều đó.
 
@@ -1093,6 +1188,8 @@ có nghĩa là xuất đúng. Chi tiết một lần báo động sai của phé
 #### 3.7.1 ★ Trục độ phân giải đo gì — và một phép đo đối chứng
 
 {truc_do_phan_giai()}
+
+{thu_tu_augment()}
 
 ### 3.8 Grad-CAM
 

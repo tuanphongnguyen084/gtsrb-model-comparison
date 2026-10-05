@@ -4,7 +4,7 @@
 > **Đừng sửa tay** — lần chạy sau sẽ ghi đè.
 > Mọi số đều truy được về một `artifacts/runs/<run_id>/result.json` cụ thể.
 >
-> Cập nhật lần cuối: 2026-10-05 14:22 · 40 run
+> Cập nhật lần cuối: 2026-10-05 15:33 · 41 run
 
 ---
 
@@ -243,6 +243,7 @@ Bảng này dễ đọc hơn hình confusion matrix 43×43, và nó cho biết l
 | preprocess      | preprocess-prep_he_y-budget             | m2_vggres   |         48 | he_y         | geo_photo       |               0.1 |    0.991528 |        0.988554 |   0.056855 |
 | preprocess      | preprocess-prep_none-budget             | m2_vggres   |         48 | none         | geo_photo       |               0.1 |    0.985827 |        0.97874  |   0.054459 |
 | resolution      | resolution-res112-budget                | m3_resnet18 |        112 | clahe        | geo_photo       |               0.1 |    0.992399 |        0.98718  |   0.098085 |
+| resolution      | resolution-res112augafter-budget        | m3_resnet18 |        112 | clahe        | geo_photo       |               0.1 |    0.992716 |        0.990257 |   0.101102 |
 | resolution      | resolution-res112real-budget            | m3_resnet18 |        112 | clahe        | geo_photo       |               0.1 |    0.990024 |        0.986878 |   0.097911 |
 | resolution      | resolution-res224-budget                | m3_resnet18 |        224 | clahe        | geo_photo       |               0.1 |    0.99327  |        0.9903   |   0.108545 |
 | resolution      | resolution-res32-budget                 | m1_lenet    |         32 | clahe        | geo_photo       |               0.1 |    0.979018 |        0.965998 |   0.122297 |

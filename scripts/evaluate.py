@@ -121,44 +121,42 @@ def save_confusion(model_key: str, stats: dict,
 # 4 — Bảng so sánh chính
 # =====================================================================
 
-def build_main_table(rows: list[dict], out_path: Path) -> pd.DataFrame:
-    """Gộp mọi run thành một bảng, sắp theo macro-F1 giảm dần.
+def build_main_table(rows: list[dict], out_path: Path,
+                     rebuild: bool = False) -> pd.DataFrame:
+    """GỘP các run vừa đánh giá vào bảng cũ, sắp theo macro-F1 giảm dần.
 
-    ★ CẢNH BÁO khi GHI ĐÈ bảng cũ bằng ÍT run hơn ★
+    ★ GỘP, KHÔNG GHI ĐÈ — tôi đã mắc lỗi này HAI LẦN ★
 
-    LỖI ĐÃ GẶP: chạy `evaluate.py --runs "artifacts/runs/*res112real*"` để lấy
-    số test cho MỘT run, và nó ghi đè main_comparison.csv từ 7 dòng xuống còn
-    1 dòng — dòng duy nhất đó lại là một run ablation (có tag), nên bảng so
-    sánh chính KHÔNG CÒN RUN CHÍNH NÀO. make_report.py crash ngay sau đó, và
-    nếu nó không crash thì báo cáo sẽ sinh ra với bảng chính trống.
+    Bản đầu ghi đè thẳng. Chạy `evaluate.py --runs "artifacts/runs/*res112real*"`
+    để lấy số test cho MỘT run làm bảng chính từ 7 dòng xuống còn 1 — và dòng
+    đó lại là run ablation (có tag), nên bảng KHÔNG CÒN RUN CHÍNH NÀO.
+    make_report.py crash ngay sau đó.
 
-    Hàm này không tự chối ghi — người dùng có thể thật sự muốn vậy. Nhưng nó
-    phải NÓI TO, vì mất bảng chính là mất thứ cả báo cáo dựa vào.
+    Lần sửa thứ nhất tôi chỉ thêm CẢNH BÁO khi số run chính giảm. Rồi tôi mắc
+    lại y nguyên — và lần đó guard IM LẶNG, vì bảng đã bị hỏng từ trước nên
+    "0 run chính -> 0 run chính" không phải là giảm. Một cảnh báo chỉ nổ ở lần
+    đầu thì vô dụng đúng lúc cần nhất.
+
+    Nên giờ hành vi mặc định là GỘP: run nào vừa đánh giá thì cập nhật dòng của
+    nó, các run khác giữ nguyên. Muốn dựng lại từ đầu (để bỏ run đã xoá khỏi
+    đĩa) thì truyền `--rebuild`.
     """
-    frame = pd.DataFrame(rows).sort_values("test_macro_f1", ascending=False)
+    moi = pd.DataFrame(rows)
 
-    if out_path.exists():
+    if not rebuild and out_path.exists():
         try:
             cu = pd.read_csv(out_path)
-            def dem_chinh(f: pd.DataFrame) -> int:
-                if "tag" not in f.columns:
-                    return len(f)
-                t = f["tag"]
-                return int((t.isna() | t.astype(str).isin(("", "(chính)"))).sum())
-            n_cu, n_moi = dem_chinh(cu), dem_chinh(frame)
-            if n_moi < n_cu:
-                log.warning("")
-                log.warning("=" * 68)
-                log.warning("★ GHI ĐÈ %s BẰNG ÍT RUN HƠN", out_path.name)
-                log.warning("  run CHÍNH: %d -> %d  (tổng dòng: %d -> %d)",
-                            n_cu, n_moi, len(cu), len(frame))
-                log.warning("  Nếu bạn chỉ muốn lấy số test cho vài run thì hãy")
-                log.warning("  chạy lại với --runs \"artifacts/runs/*\" sau đó,")
-                log.warning("  nếu không báo cáo sẽ sinh ra với bảng chính thiếu.")
-                log.warning("=" * 68)
-        except Exception as exc:                 # bảng cũ hỏng thì cứ ghi mới
-            log.debug("không đọc được bảng cũ: %s", exc)
+            if "run_id" in cu.columns and "run_id" in moi.columns:
+                giu = cu[~cu["run_id"].isin(set(moi["run_id"]))]
+                n_giu = len(giu)
+                moi = pd.concat([giu, moi], ignore_index=True)
+                if n_giu:
+                    log.info("Gộp vào bảng cũ: giữ %d run không đánh giá lần này, "
+                             "cập nhật %d run", n_giu, len(rows))
+        except Exception as exc:
+            log.warning("Không đọc được bảng cũ (%s) -> dựng mới", exc)
 
+    frame = moi.sort_values("test_macro_f1", ascending=False)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     frame.to_csv(out_path, index=False)
 
@@ -251,6 +249,9 @@ def main() -> None:
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--runs", nargs="+", default=["artifacts/runs/*"])
     parser.add_argument("--out", default="reports/tables/main_comparison.csv")
+    parser.add_argument("--rebuild", action="store_true",
+                        help="Dựng lại bảng chính TỪ ĐẦU thay vì gộp vào bảng "
+                             "cũ. Dùng khi đã xoá run khỏi đĩa.")
     parser.add_argument("--figures", default="reports/figures")
     parser.add_argument("--tables", default="reports/tables")
     parser.add_argument("--device", default=None)
@@ -309,7 +310,7 @@ def main() -> None:
         write_result(run_dir, result)
         rows.append(row_for_table(run_dir, evaluated, result))
 
-    build_main_table(rows, Path(args.out))
+    build_main_table(rows, Path(args.out), rebuild=args.rebuild)
     if not args.no_mcnemar:
         run_mcnemar_pairs(predictions, tables_dir)
 

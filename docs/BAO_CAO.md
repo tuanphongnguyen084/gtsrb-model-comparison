@@ -382,9 +382,9 @@ có nghĩa là xuất đúng. Chi tiết một lần báo động sai của phé
 
 **Xếp hạng theo `val`, KHÔNG theo `test`.** Chọn cấu hình bằng điểm test là dùng tập test để *chọn*, và khi đó test không còn là ước lượng độc lập cho cấu hình được chọn. Cột `test` dưới đây chỉ để đối chiếu.
 
-**Phép kiểm chéo:** hai cách xếp hạng cho **cùng biến thể thắng ở 6/6 trục**, tương quan val–test **0.987**. Nghĩa là val đủ tin để chọn, và không có dấu hiệu overfit vào val ở mức ảnh hưởng thứ hạng.
+**Phép kiểm chéo:** hai cách xếp hạng cho **cùng biến thể thắng ở 6/6 trục**, tương quan val–test **0.986**. Nghĩa là val đủ tin để chọn, và không có dấu hiệu overfit vào val ở mức ảnh hưởng thứ hạng.
 
-**31 run**, mỗi run đổi **đúng một biến** so với cấu hình gốc, ở chế độ ngân sách **15 epoch**. Chế độ này để **xếp hạng** biến thể, không phải để lấy số cuối cùng — cấu hình thắng cần chạy lại ở độ dài đầy đủ trước khi đưa vào bảng so sánh chính.
+**32 run**, mỗi run đổi **đúng một biến** so với cấu hình gốc, ở chế độ ngân sách **15 epoch**. Chế độ này để **xếp hạng** biến thể, không phải để lấy số cuối cùng — cấu hình thắng cần chạy lại ở độ dài đầy đủ trước khi đưa vào bảng so sánh chính.
 
 | trục            | biến thể            | model       |   val_macro_f1 |   test_top1 |   test_macro_f1 |
 |:----------------|:--------------------|:------------|---------------:|------------:|----------------:|
@@ -404,6 +404,7 @@ có nghĩa là xuất đúng. Chi tiết một lần báo động sai của phé
 | preprocess      | prep_none           | m2_vggres   |        0.98778 |     0.98583 |         0.97874 |
 | preprocess      | prep_clahe          | m2_vggres   |        0.98625 |     0.98852 |         0.98106 |
 | resolution      | res224              | m3_resnet18 |        0.99578 |     0.99327 |         0.9903  |
+| resolution      | res112augafter      | m3_resnet18 |        0.99076 |     0.99272 |         0.99026 |
 | resolution      | res112              | m3_resnet18 |        0.98956 |     0.9924  |         0.98718 |
 | resolution      | res112real          | m3_resnet18 |        0.98906 |     0.99002 |         0.98688 |
 | resolution      | res48               | m2_vggres   |        0.98625 |     0.98852 |         0.98106 |
@@ -487,6 +488,25 @@ Lý do nằm ở bản thân dữ liệu, không ở đường ống:
 Biển báo trung vị còn **nhỏ hơn cache 48 px**, và không một ảnh nào trong 51.839 ảnh có chi tiết tới 224 px. Nên lời phản biện "ảnh bị làm mờ" không đứng được: ảnh gốc đã ở độ phân giải đó, và đưa chi tiết thật vào cũng không đổi kết quả.
 
 **Kết luận:** việc cache ở 48 px là lựa chọn về tốc độ và **không cầm chân M3**. Nhưng nó LÀM ĐỔI NGHĨA trục ablation ở trên, nên trục đó phải đọc là *dung lượng feature map*, không phải *độ phân giải ảnh*.
+
+
+#### Phép đo đối chứng thứ hai: thứ tự augmentation
+
+Mặc định, augmentation được áp ở **độ phân giải cache (48 px)** rồi mới nội suy lên `img_size` — tối ưu tốc độ, vì xoay ảnh 48×48 rẻ hơn xoay 224×224. Nhưng với M3 điều đó khiến ảnh bị **lấy mẫu lại hai lần** (một lần lúc xoay/dịch ở 48 px, một lần lúc nội suy lên), còn M1/M2 chỉ bị một lần vì cache khớp `img_size`.
+
+Lại là một yếu tố bất lợi cho đúng nhóm mô hình mà kết luận chính nói là "không giúp được gì". Nhóm thêm cờ `data.aug_after_resize` để đo:
+
+| Thứ tự (ResNet18 @112 px, cache 48) | val macro-F1 | test macro-F1 |
+|---|---|---|
+| augment **trước** nội suy (mặc định) | 0.98956 | 0.98718 |
+| augment **sau** nội suy | 0.99076 | 0.99026 |
+| chênh | **+0.12 điểm** | **+0.31 điểm** |
+
+Chênh lệch **đúng chiều dự đoán** (augment sau có lợi cho M3), nhưng bằng **62% dải nhiễu** — gợi ý nhưng **chưa chứng minh được** từ một seed — dải nhiễu seed là 0.50 điểm (mục 3.5.2).
+
+**Phải nói cho đúng mức chắc chắn:** đây là hai phép đo khác nhau về tính dứt khoát. Thí nghiệm cache ở trên chênh 0,03 điểm (~6% dải nhiễu) nên kết luận được là *không ảnh hưởng*. Thí nghiệm này chênh 0.31 điểm (62% dải nhiễu) nên **chỉ kết luận được là không có bằng chứng ở một seed** — không phải là *không có hiệu ứng*. Muốn chốt thì cần 3 seed cho mỗi nhánh (~2 giờ máy), và đó là hướng mở rộng ưu tiên cao nhất của phần này.
+
+Điều có thể nói chắc: **cả hai lựa chọn đường ống đều không giải thích được khoảng cách giữa M2 và các backbone pretrained.** M2 hơn `m3_mobilenetv2` **0.84 điểm**, `m3_effnetb0` **0.42 điểm** macro-F1, đều với p < 1e-6. Hiệu ứng đường ống lớn nhất đo được là 0.31 điểm và **không có ý nghĩa thống kê** — nhỏ hơn cả khoảng cách hẹp nhất (0.42 điểm) trong các cặp đó.
 
 ### 3.8 Grad-CAM
 
@@ -573,7 +593,7 @@ của báo cáo này nằm ở ba kết luận chỉ rút ra được khi **đo 
 ```bash
 make setup-mac      # môi trường
 make data           # tải + tiền xử lý + split theo track
-make test           # 14 file test, gồm cổng chặn rò rỉ dữ liệu
+make test           # 16 file test, gồm cổng chặn rò rỉ dữ liệu
 make train-m1 train-m2 train-m3
 make eval robustness speed gradcam
 make report baocao  # sinh KET_QUA.md và BAO_CAO.md
@@ -599,7 +619,7 @@ Mỗi file mã nguồn ghi rõ `CHỦ: <tên>` ở đầu docstring.
 
 | File | Nội dung |
 |---|---|
-| `docs/KET_QUA.md` | toàn bộ bảng số, sinh tự động (332 dòng) |
+| `docs/KET_QUA.md` | toàn bộ bảng số, sinh tự động (333 dòng) |
 | `docs/LY_THUYET.md` | cơ sở lý thuyết, công thức, lý do từng lựa chọn thiết kế; có bản đồ code ↔ lý thuyết (942 dòng) |
 | `docs/SU_CO.md` | **13 sự cố** đã gặp thật, kèm nguyên nhân, cách sửa và test chặn (410 dòng) |
 | `docs/PHAN_CONG.md` | phân công theo người, kèm khái niệm mỗi người phải nắm (216 dòng) |
@@ -607,4 +627,4 @@ Mỗi file mã nguồn ghi rõ `CHỦ: <tên>` ở đầu docstring.
 | `reports/tables/` | **26 bảng CSV** |
 | `reports/figures/` | **37 hình** |
 | `notebooks/` | **10 notebook** (01–09 diễn giải từng bước, 00 để chạy trên Colab) |
-| `tests/` | **14 file test**, chạy bằng `make test` |
+| `tests/` | **16 file test**, chạy bằng `make test` |
