@@ -15,10 +15,20 @@ printf "\n  ABLATION  %2d/30 run xong" "$XONG"
 printf "\n  SEED      %2d/2 run xong\n" "$SEED"
 [[ -n "$DANG" ]] && printf "\n  đang chạy  %s\n             %s\n" "$DANG" "$EP"
 
-if [[ -f logs/.ABLATION_DONE ]]; then
-  printf "\n  *** HOÀN TẤT — nói với Claude để sinh lại báo cáo ***\n\n"
+# "HOÀN TẤT" phải dựa trên ĐẾM ĐƯỢC BAO NHIÊU RUN, không dựa vào file đánh dấu.
+#
+# LỖI ĐÃ GẶP: mẻ đêm 5/10 báo mã thoát 0 và tạo .ABLATION_DONE, nhưng chỉ có
+# 26/30 run (already_done() thiếu tên model nên bỏ qua 4 job). Script này nhìn
+# file đánh dấu nên vẫn in "HOÀN TẤT" ở 26/30 — đúng cái lỗi mà nó phải phát
+# hiện. Cùng họ với progress.py báo "còn 6h42m" cạnh dòng "HOÀN TẤT".
+if (( XONG >= 30 && SEED >= 2 )); then
+  printf "\n  *** ĐỦ 30/30 + 2 seed — nói với Claude để sinh lại báo cáo ***\n\n"
 elif pgrep -qf "scripts/run_ablation.py|scripts/run_seeds.py"; then
   printf "  tình trạng  đang chạy bình thường\n\n"
 else
-  printf "\n  !!! MẺ ĐÃ DỪNG mà chưa xong — chạy lại: ./run_ablation_local.sh\n\n"
+  printf "\n  !!! MẺ ĐÃ DỪNG mà CHƯA ĐỦ (%d/30 ablation, %d/2 seed)\n" "$XONG" "$SEED"
+  if [[ -f logs/.ABLATION_DONE ]]; then
+    printf "      Có file .ABLATION_DONE nhưng số run KHÔNG đủ -> có job bị bỏ qua.\n"
+  fi
+  printf "      Chạy lại:  ./run_ablation_local.sh\n\n"
 fi
