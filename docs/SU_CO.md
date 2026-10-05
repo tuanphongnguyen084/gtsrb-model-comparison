@@ -224,13 +224,32 @@ của việc input có nằm trong miền đã train hay không.
 
 ---
 
-## 10. int8 static VỠ trên EfficientNet-B0 vì `SiLU` không có kernel lượng tử hoá
+## 10. int8 static VỠ trên 4/5 mô hình — ba ca là phép `+` của residual
 
 **Triệu chứng.** `quantize_static` convert xong nhưng chạy thì:
 `Could not run 'aten::silu.out' with arguments from the 'QuantizedCPU' backend`.
 
-**Nguyên nhân.** Backend lượng tử hoá CPU của PyTorch chưa có kernel int8 cho `SiLU`
-(Swish) — hàm hoạt hoá mà EfficientNet dùng ở mọi khối. ReLU thì có.
+**Đo lại trên cả 5 mô hình — và nguyên nhân KHÔNG như tôi tưởng ban đầu:**
+
+| Mô hình | op không có kernel int8 | nguyên nhân |
+|---|---|---|
+| `m2_vggres` | `aten::add.out` | **residual connection** |
+| `m3_mobilenetv2` | `aten::add.out` | **residual connection** |
+| `m3_resnet18` | `aten::add.out` | **residual connection** |
+| `m3_effnetb0` | `aten::silu.out` | hàm hoạt hoá SiLU/Swish |
+| `m1_lenet` | *(chạy được)* | **không có residual** |
+
+**Ba trong bốn ca là phép `+` của skip connection, không phải hàm hoạt hoá.** Tôi thấy
+EfficientNet vỡ vì `SiLU` trước nên kết luận sớm rằng vấn đề là hàm hoạt hoá. Đo đủ 5 mô
+hình thì nguyên nhân phổ biến hơn là `aten::add`.
+
+Backend `QuantizedCPU` không có kernel cho `+` giữa hai tensor đã lượng tử hoá: thang
+lượng tử (scale, zero_point) của hai nhánh khác nhau nên không cộng trực tiếp được. Phép
+cộng đó phải viết bằng `torch.nn.quantized.FloatFunctional().add()` để backend biết cách
+khớp thang. Viết `a + b` như bình thường thì **convert vẫn qua, chỉ forward mới vỡ**.
+
+M1 LeNet lượng tử hoá được **chính vì nó không có residual** — kiến trúc cũ nhất lại là
+kiến trúc duy nhất triển khai int8 tĩnh được mà không phải sửa code.
 
 **Vì sao không sập cả mẻ.** `_works()` chạy thử một forward sau khi convert và bắt được
 lỗi này, nên bảng chỉ thiếu dòng `int8_static` của EfficientNet-B0 thay vì cả script
@@ -240,9 +259,15 @@ kiểu đó: thiếu `QuantStub`/`DeQuantStub` nên convert chạy qua nhưng fo
 sửa bằng `_QuantWrapper` trong `src/gtsrb/deploy/export.py`. Hai lần, cùng một bài học:
 **convert được ≠ chạy được**.
 
-**Kết luận cho báo cáo.** Khả năng lượng tử hoá **phụ thuộc hàm hoạt hoá**, không chỉ
-phụ thuộc kiến trúc. Chọn model cho thiết bị biên mà định dùng int8 thì phải kiểm
-backend có kernel cho mọi op trong model — chỉ đếm tham số và FLOPs là không đủ.
+**Kết luận cho báo cáo.** Khả năng lượng tử hoá phụ thuộc **cách VIẾT từng phép toán**,
+không chỉ kiến trúc hay số tham số. Hai mô hình cùng kiến trúc residual, một dùng `a + b`
+và một dùng `FloatFunctional().add()`, sẽ cho kết quả khác nhau hoàn toàn ở bước này —
+mà sự khác biệt đó không hiện ra ở số tham số, FLOPs, hay bất cứ bảng nào trong báo cáo.
+
+**Hướng sửa nếu cần int8 tĩnh:** thay mọi phép `+` trong residual bằng
+`FloatFunctional().add()`. Với M2 đó là một dòng trong `_build_block()`; với ResNet18 và
+MobileNetV2 thì phải sửa trong torchvision, nên thực tế là dùng `int8_dynamic` hoặc
+chuyển sang FX graph mode quantization (tự chèn giúp).
 
 ---
 

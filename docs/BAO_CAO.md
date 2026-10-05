@@ -339,49 +339,92 @@ thông bộ nhớ**, không bởi năng lực tính toán.
 nhất trong cả 5.** Muốn nói về triển khai thì phải đo wall-clock trên thiết
 bị đích.
 
+#### 3.6.1 Nén int8 và xuất cho thiết bị biên
+
+| model          | biến thể     |   dung lượng (MB) |   top-1 |   macro-F1 |   p50 (ms) |   p95 (ms) |   nhẹ hơn |   nhanh hơn |   mất top-1 (điểm) |
+|:---------------|:-------------|------------------:|--------:|-----------:|-----------:|-----------:|----------:|------------:|-------------------:|
+| m1_lenet       | fp32         |              9.7  | 0.982   |    0.97615 |       1.07 |       1.58 |      1    |        1    |               0    |
+| m1_lenet       | int8_dynamic |              2.59 | 0.982   |    0.97615 |       0.93 |       1.13 |      3.75 |        1.15 |               0    |
+| m1_lenet       | int8_static  |              2.43 | 0.9815  |    0.97496 |       0.79 |       0.85 |      3.99 |        1.35 |               0.05 |
+| m2_vggres      | fp32         |              4.99 | 0.99025 |    0.98459 |       3.43 |       4.07 |      1    |        1    |               0    |
+| m2_vggres      | int8_dynamic |              4.95 | 0.99025 |    0.98459 |       3.27 |       3.69 |      1.01 |        1.05 |               0    |
+| m3_effnetb0    | fp32         |             16.55 | 0.98625 |    0.98265 |     239.01 |     255.27 |      1    |        1    |               0    |
+| m3_effnetb0    | int8_dynamic |             16.38 | 0.98625 |    0.98265 |     241.83 |     246.51 |      1.01 |        0.99 |               0    |
+| m3_mobilenetv2 | fp32         |              9.36 | 0.98725 |    0.98093 |      49.22 |      50.58 |      1    |        1    |               0    |
+| m3_mobilenetv2 | int8_dynamic |              9.2  | 0.98725 |    0.98093 |      51.12 |      54.52 |      1.02 |        0.96 |               0    |
+| m3_resnet18    | fp32         |             44.87 | 0.993   |    0.98972 |      15.09 |      17.51 |      1    |        1    |               0    |
+| m3_resnet18    | int8_dynamic |             44.81 | 0.993   |    0.98959 |      15    |      15.78 |      1    |        1.01 |               0    |
+
+Cột **nhẹ hơn** và **nhanh hơn** so với bản `fp32` của cùng mô hình.
+
+⚠️ **`int8_static` chỉ chạy được trên 1/5 mô hình** (`m1_lenet`). Bốn mô hình kia convert thành công nhưng forward **vỡ lúc chạy**, và lý do rất cụ thể:
+
+| Mô hình | op không có kernel int8 | nguyên nhân |
+|---|---|---|
+| `m2_vggres` | `aten::add.out` | **residual connection** |
+| `m3_mobilenetv2` | `aten::add.out` | **residual connection** |
+| `m3_resnet18` | `aten::add.out` | **residual connection** |
+| `m3_effnetb0` | `aten::silu.out` | hàm hoạt hoá SiLU/Swish |
+| `m1_lenet` | *(chạy được)* | **không có residual** |
+
+**Ba trong bốn ca là phép `+` của skip connection, không phải hàm hoạt hoá.** Backend `QuantizedCPU` không có kernel cho `+` giữa hai tensor đã lượng tử hoá: phép cộng đó phải được viết bằng `torch.nn.quantized.FloatFunctional().add()` để backend biết cách khớp thang lượng tử của hai nhánh. Viết `a + b` như bình thường thì convert vẫn qua, chỉ forward mới vỡ.
+
+M1 LeNet lượng tử hoá được **chính vì nó không có residual** — kiến trúc cũ nhất lại là kiến trúc duy nhất triển khai int8 tĩnh được mà không phải sửa code.
+
+Hệ quả: tỉ lệ nén **3.99×** chỉ đo được trên `m1_lenet`, **không ngoại suy** cho bốn mô hình kia. Bài học chung: khả năng lượng tử hoá phụ thuộc **cách VIẾT từng phép toán**, không chỉ kiến trúc hay số tham số. `_works()` thử chạy một forward sau convert nên chỉ thiếu một dòng bảng thay vì sập cả script. Chi tiết `docs/SU_CO.md` §10.
+
+Cả 5 mô hình đều xuất được **TorchScript** và **ONNX**, và mỗi bản ONNX đều được
+**kiểm lại bằng ảnh test thật** (so logit và so lớp dự đoán) — xuất thành công không
+có nghĩa là xuất đúng. Chi tiết một lần báo động sai của phép kiểm này ở
+`docs/SU_CO.md` §9.
+
 ### 3.7 Ablation — đổi một biến một lần
+
+**Xếp hạng theo `val`, KHÔNG theo `test`.** Chọn cấu hình bằng điểm test là dùng tập test để *chọn*, và khi đó test không còn là ước lượng độc lập cho cấu hình được chọn. Cột `test` dưới đây chỉ để đối chiếu.
+
+**Phép kiểm chéo:** hai cách xếp hạng cho **cùng biến thể thắng ở 6/6 trục**, tương quan val–test **0.987**. Nghĩa là val đủ tin để chọn, và không có dấu hiệu overfit vào val ở mức ảnh hưởng thứ hạng.
 
 **30 run**, mỗi run đổi **đúng một biến** so với cấu hình gốc, ở chế độ ngân sách **15 epoch**. Chế độ này để **xếp hạng** biến thể, không phải để lấy số cuối cùng — cấu hình thắng cần chạy lại ở độ dài đầy đủ trước khi đưa vào bảng so sánh chính.
 
-| trục            | biến thể            | model       |   test_top1 |   test_macro_f1 |
-|:----------------|:--------------------|:------------|------------:|----------------:|
-| augmentation    | aug_none            | m2_vggres   |     0.98709 |         0.98344 |
-| augmentation    | aug_geo_photo_erase | m2_vggres   |     0.98709 |         0.98148 |
-| augmentation    | aug_geo_photo       | m2_vggres   |     0.98852 |         0.98106 |
-| augmentation    | aug_geo             | m2_vggres   |     0.98686 |         0.9808  |
-| components      | no_spatial_dropout  | m2_vggres   |     0.99066 |         0.98777 |
-| components      | no_residual         | m2_vggres   |     0.98709 |         0.98504 |
-| components      | full                | m2_vggres   |     0.98852 |         0.98106 |
-| components      | no_bn               | m2_vggres   |     0.98575 |         0.97935 |
-| label_smoothing | ls0.1               | m2_vggres   |     0.98852 |         0.98106 |
-| label_smoothing | ls0.0               | m2_vggres   |     0.98844 |         0.97965 |
-| label_smoothing | ls0.2               | m2_vggres   |     0.98717 |         0.97912 |
-| preprocess      | prep_he_y           | m2_vggres   |     0.99153 |         0.98855 |
-| preprocess      | prep_he_gray        | m2_vggres   |     0.98986 |         0.98514 |
-| preprocess      | prep_clahe          | m2_vggres   |     0.98852 |         0.98106 |
-| preprocess      | prep_none           | m2_vggres   |     0.98583 |         0.97874 |
-| resolution      | res224              | m3_resnet18 |     0.99327 |         0.9903  |
-| resolution      | res112              | m3_resnet18 |     0.9924  |         0.98718 |
-| resolution      | res48               | m2_vggres   |     0.98852 |         0.98106 |
-| resolution      | res48               | m1_lenet    |     0.98472 |         0.97869 |
-| resolution      | res64               | m3_resnet18 |     0.98709 |         0.97758 |
-| resolution      | res64               | m1_lenet    |     0.98187 |         0.97737 |
-| resolution      | res32               | m2_vggres   |     0.98622 |         0.97711 |
-| resolution      | res64               | m2_vggres   |     0.98369 |         0.97489 |
-| resolution      | res32               | m1_lenet    |     0.97902 |         0.966   |
-| scaling         | width2.0            | m2_vggres   |     0.98971 |         0.98626 |
-| scaling         | depth5              | m2_vggres   |     0.99066 |         0.98468 |
-| scaling         | depth4              | m2_vggres   |     0.98852 |         0.98106 |
-| scaling         | width1.0            | m2_vggres   |     0.98852 |         0.98106 |
-| scaling         | depth3              | m2_vggres   |     0.95455 |         0.90452 |
-| scaling         | width0.5            | m2_vggres   |     0.94782 |         0.89719 |
+| trục            | biến thể            | model       |   val_macro_f1 |   test_top1 |   test_macro_f1 |
+|:----------------|:--------------------|:------------|---------------:|------------:|----------------:|
+| augmentation    | aug_none            | m2_vggres   |        0.98895 |     0.98709 |         0.98344 |
+| augmentation    | aug_geo_photo       | m2_vggres   |        0.98625 |     0.98852 |         0.98106 |
+| augmentation    | aug_geo_photo_erase | m2_vggres   |        0.98412 |     0.98709 |         0.98148 |
+| augmentation    | aug_geo             | m2_vggres   |        0.98301 |     0.98686 |         0.9808  |
+| components      | no_spatial_dropout  | m2_vggres   |        0.99562 |     0.99066 |         0.98777 |
+| components      | full                | m2_vggres   |        0.98625 |     0.98852 |         0.98106 |
+| components      | no_residual         | m2_vggres   |        0.98535 |     0.98709 |         0.98504 |
+| components      | no_bn               | m2_vggres   |        0.98481 |     0.98575 |         0.97935 |
+| label_smoothing | ls0.1               | m2_vggres   |        0.98625 |     0.98852 |         0.98106 |
+| label_smoothing | ls0.0               | m2_vggres   |        0.98528 |     0.98844 |         0.97965 |
+| label_smoothing | ls0.2               | m2_vggres   |        0.98263 |     0.98717 |         0.97912 |
+| preprocess      | prep_he_y           | m2_vggres   |        0.99245 |     0.99153 |         0.98855 |
+| preprocess      | prep_he_gray        | m2_vggres   |        0.99166 |     0.98986 |         0.98514 |
+| preprocess      | prep_none           | m2_vggres   |        0.98778 |     0.98583 |         0.97874 |
+| preprocess      | prep_clahe          | m2_vggres   |        0.98625 |     0.98852 |         0.98106 |
+| resolution      | res224              | m3_resnet18 |        0.99578 |     0.99327 |         0.9903  |
+| resolution      | res112              | m3_resnet18 |        0.98956 |     0.9924  |         0.98718 |
+| resolution      | res48               | m2_vggres   |        0.98625 |     0.98852 |         0.98106 |
+| resolution      | res32               | m2_vggres   |        0.98581 |     0.98622 |         0.97711 |
+| resolution      | res32               | m1_lenet    |        0.98455 |     0.97902 |         0.966   |
+| resolution      | res64               | m2_vggres   |        0.98447 |     0.98369 |         0.97489 |
+| resolution      | res48               | m1_lenet    |        0.98394 |     0.98472 |         0.97869 |
+| resolution      | res64               | m1_lenet    |        0.98324 |     0.98187 |         0.97737 |
+| resolution      | res64               | m3_resnet18 |        0.98238 |     0.98709 |         0.97758 |
+| scaling         | width2.0            | m2_vggres   |        0.99247 |     0.98971 |         0.98626 |
+| scaling         | depth5              | m2_vggres   |        0.98826 |     0.99066 |         0.98468 |
+| scaling         | depth4              | m2_vggres   |        0.98625 |     0.98852 |         0.98106 |
+| scaling         | width1.0            | m2_vggres   |        0.98625 |     0.98852 |         0.98106 |
+| scaling         | width0.5            | m2_vggres   |        0.90067 |     0.94782 |         0.89719 |
+| scaling         | depth3              | m2_vggres   |        0.89945 |     0.95455 |         0.90452 |
 
 **★ 4/6 trục cho kết quả ĐI NGƯỢC cấu hình mặc định của dự án:**
 
-- **augmentation** (`m2_vggres`): tốt nhất là `aug_none` (0.98344), cao hơn mặc định `aug_geo_photo` (0.98106) **0.24 điểm**.
-- **components** (`m2_vggres`): tốt nhất là `no_spatial_dropout` (0.98777), cao hơn mặc định `full` (0.98106) **0.67 điểm**.
-- **preprocess** (`m2_vggres`): tốt nhất là `prep_he_y` (0.98855), cao hơn mặc định `prep_clahe` (0.98106) **0.75 điểm**.
-- **scaling** (`m2_vggres`): tốt nhất là `width2.0` (0.98626), cao hơn mặc định `depth4` (0.98106) **0.52 điểm**.
+- **augmentation** (`m2_vggres`): tốt nhất là `aug_none` (val 0.98895, test 0.98344), cao hơn mặc định `aug_geo_photo` (val 0.98625) **0.27 điểm val**.
+- **components** (`m2_vggres`): tốt nhất là `no_spatial_dropout` (val 0.99562, test 0.98777), cao hơn mặc định `full` (val 0.98625) **0.94 điểm val**.
+- **preprocess** (`m2_vggres`): tốt nhất là `prep_he_y` (val 0.99245, test 0.98855), cao hơn mặc định `prep_clahe` (val 0.98625) **0.62 điểm val**.
+- **scaling** (`m2_vggres`): tốt nhất là `width2.0` (val 0.99247, test 0.98626), cao hơn mặc định `depth4` (val 0.98625) **0.62 điểm val**.
 
 Ba điều phải nói khi trình bày, không được bỏ:
 
@@ -447,9 +490,15 @@ nghĩa thống kê* là lựa chọn tồi trên hệ thống thời gian thực
 4. **So sánh M2 với M3 lẫn hai biến** (pretrained hay không, và 48 hay 224 px). Trục
    ablation `resolution` đã chạy đủ 9 run để tách chúng (mục 3.7), nhưng ở chế độ
    ngân sách 15 epoch — xếp hạng được biến thể, chưa phải số cuối cùng.
-5. **Chỉ M2 được chạy nhiều seed** (3 seed); bốn mô hình còn lại một seed. Biên độ seed đo
+5. **Thí nghiệm rò rỉ chỉ chạy trên M1.** Con số 1,09 điểm val ảo đo được trên M1;
+   mức thổi phồng có thể khác với mô hình dung lượng lớn hơn, vốn dễ nhớ frame hơn.
+6. **Không dùng class weighting hay resampling khi huấn luyện.** `losses.py` có hỗ trợ
+   `class_weight` nhưng các config đều để tắt, trong khi dữ liệu mất cân bằng 10,7:1 và
+   macro-F1 lại là chỉ số chính. Đây là lựa chọn có ý thức (giữ đường cơ sở đơn giản,
+   và macro-F1 đã đủ để phát hiện lỗi ở lớp thiểu số) nhưng là một hướng mở rộng rõ ràng.
+7. **Chỉ M2 được chạy nhiều seed** (3 seed); bốn mô hình còn lại một seed. Biên độ seed đo
    được của M2 dùng làm thước đo nhiễu cho cả bảng, nhưng đó là phép ngoại suy.
-6. **Chưa kiểm adversarial robustness** (FGSM/PGD) — khác bản chất với nhiễu tự nhiên.
+8. **Chưa kiểm adversarial robustness** (FGSM/PGD) — khác bản chất với nhiễu tự nhiên.
 
 ---
 
@@ -475,7 +524,7 @@ của báo cáo này nằm ở ba kết luận chỉ rút ra được khi **đo 
 ```bash
 make setup-mac      # môi trường
 make data           # tải + tiền xử lý + split theo track
-make test           # 95 test, gồm cổng chặn rò rỉ dữ liệu
+make test           # 14 file test, gồm cổng chặn rò rỉ dữ liệu
 make train-m1 train-m2 train-m3
 make eval robustness speed gradcam
 make report baocao  # sinh KET_QUA.md và BAO_CAO.md
@@ -503,7 +552,7 @@ Mỗi file mã nguồn ghi rõ `CHỦ: <tên>` ở đầu docstring.
 |---|---|
 | `docs/KET_QUA.md` | toàn bộ bảng số, sinh tự động (331 dòng) |
 | `docs/LY_THUYET.md` | cơ sở lý thuyết, công thức, lý do từng lựa chọn thiết kế; có bản đồ code ↔ lý thuyết (942 dòng) |
-| `docs/SU_CO.md` | **13 sự cố** đã gặp thật, kèm nguyên nhân, cách sửa và test chặn (385 dòng) |
+| `docs/SU_CO.md` | **13 sự cố** đã gặp thật, kèm nguyên nhân, cách sửa và test chặn (410 dòng) |
 | `docs/PHAN_CONG.md` | phân công theo người, kèm khái niệm mỗi người phải nắm (216 dòng) |
 | `docs/INTERFACE.md` | hợp đồng giữa các phần: chữ ký hàm, schema `result.json` (276 dòng) |
 | `reports/tables/` | **26 bảng CSV** |

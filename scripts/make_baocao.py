@@ -298,6 +298,70 @@ def nghich_ly_effnet() -> str:
             f"**{la:.1f} lần** trên CPU")
 
 
+def so_test() -> str:
+    """Số test ĐẾM THẬT bằng pytest --collect-only.
+
+    LỖI ĐÃ GẶP: báo cáo viết cứng "95 test" trong khi đã có 470. Một con số
+    kiểm thử sai làm người đọc mất tin vào toàn bộ phần tái lập.
+    """
+    import subprocess
+    goc = pathlib.Path(__file__).resolve().parent.parent
+    try:
+        r = subprocess.run(["python", "-m", "pytest", "--collect-only", "-q"],
+                           cwd=goc, capture_output=True, text=True, timeout=180)
+        for d in reversed(r.stdout.splitlines()):
+            if "test" in d and "collected" in d:
+                return d.strip().split()[0] + " test"
+            if d.strip().endswith("tests collected") or "/" in d:
+                continue
+        import re
+        m = re.search(r"(\d+) tests? collected", r.stdout)
+        if m:
+            return f"{m.group(1)} test"
+    except Exception:
+        pass
+    return f"{len(list(goc.glob('tests/test_*.py')))} file test"
+
+
+def pham_vi_nen_int8() -> str:
+    """int8 static chạy được trên mấy mô hình, và vì sao không phải tất cả."""
+    frame = read("edge_export.csv")
+    if frame is None or "biến thể" not in frame.columns:
+        return ""
+    dem = frame.groupby("biến thể")["model"].nunique().to_dict()
+    tong = frame["model"].nunique()
+    n_static = dem.get("int8_static", 0)
+    if n_static >= tong:
+        return ""
+    co = sorted(frame.loc[frame["biến thể"] == "int8_static", "model"].unique())
+    nen = frame.loc[frame["biến thể"] == "int8_static", "nhẹ hơn"].max()
+    return (f"\n⚠️ **`int8_static` chỉ chạy được trên {n_static}/{tong} mô hình** "
+            f"({', '.join(f'`{m}`' for m in co)}). Bốn mô hình kia convert thành "
+            f"công nhưng forward **vỡ lúc chạy**, và lý do rất cụ thể:\n"
+            f"\n| Mô hình | op không có kernel int8 | nguyên nhân |\n"
+            f"|---|---|---|\n"
+            f"| `m2_vggres` | `aten::add.out` | **residual connection** |\n"
+            f"| `m3_mobilenetv2` | `aten::add.out` | **residual connection** |\n"
+            f"| `m3_resnet18` | `aten::add.out` | **residual connection** |\n"
+            f"| `m3_effnetb0` | `aten::silu.out` | hàm hoạt hoá SiLU/Swish |\n"
+            f"| `m1_lenet` | *(chạy được)* | **không có residual** |\n"
+            f"\n**Ba trong bốn ca là phép `+` của skip connection, không phải "
+            f"hàm hoạt hoá.** Backend `QuantizedCPU` không có kernel cho `+` "
+            f"giữa hai tensor đã lượng tử hoá: phép cộng đó phải được viết bằng "
+            f"`torch.nn.quantized.FloatFunctional().add()` để backend biết cách "
+            f"khớp thang lượng tử của hai nhánh. Viết `a + b` như bình thường "
+            f"thì convert vẫn qua, chỉ forward mới vỡ.\n"
+            f"\nM1 LeNet lượng tử hoá được **chính vì nó không có residual** — "
+            f"kiến trúc cũ nhất lại là kiến trúc duy nhất triển khai int8 tĩnh "
+            f"được mà không phải sửa code.\n"
+            f"\nHệ quả: tỉ lệ nén **{nen:.2f}×** chỉ đo được trên "
+            f"`{co[0] if co else '?'}`, **không ngoại suy** cho bốn mô hình kia. "
+            f"Bài học chung: khả năng lượng tử hoá phụ thuộc **cách VIẾT từng "
+            f"phép toán**, không chỉ kiến trúc hay số tham số. `_works()` thử "
+            f"chạy một forward sau convert nên chỉ thiếu một dòng bảng thay vì "
+            f"sập cả script. Chi tiết `docs/SU_CO.md` §10.")
+
+
 def phu_luc_tai_lieu() -> str:
     """Bảng tài liệu kèm theo, ĐẾM TỪ ĐĨA.
 
@@ -358,13 +422,30 @@ def bang_ablation() -> str:
         lambda r: str(r["tag"]).replace(f"{r['trục']}-", "").replace("-budget", ""),
         axis=1)
 
-    dong = [f"**{len(g)} run**, mỗi run đổi **đúng một biến** so với cấu hình gốc, "
+    # Hai cách xếp hạng có cho cùng người thắng? Nêu ra như phép kiểm chéo.
+    khop = sum(
+        sub.loc[sub["val_macro_f1"].idxmax(), "biến thể"]
+        == sub.loc[sub["test_macro_f1"].idxmax(), "biến thể"]
+        for _, sub in g.groupby("trục"))
+    n_truc = g["trục"].nunique()
+    tuong_quan = g["val_macro_f1"].corr(g["test_macro_f1"])
+
+    dong = [f"**Xếp hạng theo `val`, KHÔNG theo `test`.** Chọn cấu hình bằng "
+            f"điểm test là dùng tập test để *chọn*, và khi đó test không còn là "
+            f"ước lượng độc lập cho cấu hình được chọn. Cột `test` dưới đây chỉ "
+            f"để đối chiếu.", "",
+            f"**Phép kiểm chéo:** hai cách xếp hạng cho **cùng biến thể thắng ở "
+            f"{khop}/{n_truc} trục**, tương quan val–test "
+            f"**{tuong_quan:.3f}**. Nghĩa là val đủ tin để chọn, và không có dấu "
+            f"hiệu overfit vào val ở mức ảnh hưởng thứ hạng.", "",
+            f"**{len(g)} run**, mỗi run đổi **đúng một biến** so với cấu hình gốc, "
             f"ở chế độ ngân sách **15 epoch**. Chế độ này để **xếp hạng** biến "
             f"thể, không phải để lấy số cuối cùng — cấu hình thắng cần chạy lại "
             f"ở độ dài đầy đủ trước khi đưa vào bảng so sánh chính.", ""]
 
-    bang = (g[["trục", "biến thể", "model", "test_top1", "test_macro_f1"]]
-            .sort_values(["trục", "test_macro_f1"], ascending=[True, False]))
+    bang = (g[["trục", "biến thể", "model", "val_macro_f1",
+              "test_top1", "test_macro_f1"]]
+            .sort_values(["trục", "val_macro_f1"], ascending=[True, False]))
     dong += [bang.round(5).to_markdown(index=False), ""]
 
     # ---- Chỗ ablation KHÔNG đồng ý với mặc định ----
@@ -382,17 +463,17 @@ def bang_ablation() -> str:
         hang_md = sub[sub["biến thể"].isin(ten_md)]
         if hang_md.empty:
             continue
-        goc = hang_md.loc[hang_md["test_macro_f1"].idxmax()]
+        goc = hang_md.loc[hang_md["val_macro_f1"].idxmax()]
         cung_model = sub[sub["model"] == goc["model"]]
-        tot = cung_model.loc[cung_model["test_macro_f1"].idxmax()]
+        tot = cung_model.loc[cung_model["val_macro_f1"].idxmax()]
         if tot["biến thể"] in ten_md:
             continue
-        hieu = (tot["test_macro_f1"] - goc["test_macro_f1"]) * 100
+        hieu = (tot["val_macro_f1"] - goc["val_macro_f1"]) * 100
         nguoc.append(
             f"- **{truc}** (`{goc['model']}`): tốt nhất là `{tot['biến thể']}` "
-            f"({tot['test_macro_f1']:.5f}), cao hơn mặc định "
-            f"`{goc['biến thể']}` ({goc['test_macro_f1']:.5f}) "
-            f"**{hieu:.2f} điểm**.")
+            f"(val {tot['val_macro_f1']:.5f}, test {tot['test_macro_f1']:.5f}), "
+            f"cao hơn mặc định `{goc['biến thể']}` "
+            f"(val {goc['val_macro_f1']:.5f}) **{hieu:.2f} điểm val**.")
 
     if nguoc:
         dong += [f"**★ {len(nguoc)}/{g['trục'].nunique()} trục cho kết quả ĐI NGƯỢC "
@@ -897,6 +978,18 @@ thông bộ nhớ**, không bởi năng lực tính toán.
 nhất trong cả {f['n_models']}.** Muốn nói về triển khai thì phải đo wall-clock trên thiết
 bị đích.
 
+#### 3.6.1 Nén int8 và xuất cho thiết bị biên
+
+{md(read("edge_export.csv"))}
+
+Cột **nhẹ hơn** và **nhanh hơn** so với bản `fp32` của cùng mô hình.
+{pham_vi_nen_int8()}
+
+Cả 5 mô hình đều xuất được **TorchScript** và **ONNX**, và mỗi bản ONNX đều được
+**kiểm lại bằng ảnh test thật** (so logit và so lớp dự đoán) — xuất thành công không
+có nghĩa là xuất đúng. Chi tiết một lần báo động sai của phép kiểm này ở
+`docs/SU_CO.md` §9.
+
 ### 3.7 Ablation — đổi một biến một lần
 
 {bang_ablation()}
@@ -948,9 +1041,15 @@ nghĩa thống kê* là lựa chọn tồi trên hệ thống thời gian thực
 4. **So sánh M2 với M3 lẫn hai biến** (pretrained hay không, và 48 hay 224 px). Trục
    ablation `resolution` đã chạy đủ 9 run để tách chúng (mục 3.7), nhưng ở chế độ
    ngân sách 15 epoch — xếp hạng được biến thể, chưa phải số cuối cùng.
-5. **Chỉ M2 được chạy nhiều seed** (3 seed); bốn mô hình còn lại một seed. Biên độ seed đo
+5. **Thí nghiệm rò rỉ chỉ chạy trên M1.** Con số 1,09 điểm val ảo đo được trên M1;
+   mức thổi phồng có thể khác với mô hình dung lượng lớn hơn, vốn dễ nhớ frame hơn.
+6. **Không dùng class weighting hay resampling khi huấn luyện.** `losses.py` có hỗ trợ
+   `class_weight` nhưng các config đều để tắt, trong khi dữ liệu mất cân bằng 10,7:1 và
+   macro-F1 lại là chỉ số chính. Đây là lựa chọn có ý thức (giữ đường cơ sở đơn giản,
+   và macro-F1 đã đủ để phát hiện lỗi ở lớp thiểu số) nhưng là một hướng mở rộng rõ ràng.
+7. **Chỉ M2 được chạy nhiều seed** (3 seed); bốn mô hình còn lại một seed. Biên độ seed đo
    được của M2 dùng làm thước đo nhiễu cho cả bảng, nhưng đó là phép ngoại suy.
-6. **Chưa kiểm adversarial robustness** (FGSM/PGD) — khác bản chất với nhiễu tự nhiên.
+8. **Chưa kiểm adversarial robustness** (FGSM/PGD) — khác bản chất với nhiễu tự nhiên.
 
 ---
 
@@ -976,7 +1075,7 @@ của báo cáo này nằm ở ba kết luận chỉ rút ra được khi **đo 
 ```bash
 make setup-mac      # môi trường
 make data           # tải + tiền xử lý + split theo track
-make test           # 95 test, gồm cổng chặn rò rỉ dữ liệu
+make test           # {so_test()}, gồm cổng chặn rò rỉ dữ liệu
 make train-m1 train-m2 train-m3
 make eval robustness speed gradcam
 make report baocao  # sinh KET_QUA.md và BAO_CAO.md

@@ -321,7 +321,16 @@ AXIS_XLABEL = {
 
 
 def plot_axes(frame: pd.DataFrame, out_dir: Path,
-              metric: str = "test_macro_f1") -> list[Path]:
+              metric: str = "val_macro_f1") -> list[Path]:
+    # ★ CHỌN theo VAL, không theo TEST.
+    #
+    # Xếp hạng biến thể bằng test_macro_f1 là dùng tập test để CHỌN cấu hình.
+    # Làm thế thì test không còn là ước lượng độc lập cho cấu hình được chọn,
+    # và con số test của nó bị thiên lệch lạc quan.
+    #
+    # Kiểm thực tế trên 30 run: hai cách xếp hạng cho CÙNG người thắng ở 6/6
+    # trục (tương quan Pearson 0,987). Nhưng đó là may, không phải lý do để
+    # chọn theo test.
     """Vẽ một hình cho mỗi trục ablation. Trả danh sách file đã tạo.
 
     Mỗi hình trả lời đúng một câu: **biến này đáng bao nhiêu điểm macro-F1?**
