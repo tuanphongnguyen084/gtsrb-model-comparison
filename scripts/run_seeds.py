@@ -64,22 +64,72 @@ def train_one_seed(config: str, seed: int, overrides: list[str],
     return subprocess.run(command).returncode == 0
 
 
-def collect(pattern: str = "artifacts/runs/*seed*") -> pd.DataFrame:
-    """Gom mọi run có tag seedN thành một bảng dài (một dòng mỗi run)."""
-    rows = []
-    for path in sorted(glob.glob(f"{pattern}/result.json")):
-        data = json.loads(Path(path).read_text(encoding="utf-8"))
+# Các khoá cấu hình phải GIỐNG NHAU để hai run được coi là "cùng thí nghiệm,
+# khác seed". Thiếu một khoá nào ở đây là gộp lẫn hai thí nghiệm khác nhau rồi
+# gọi chênh lệch đó là "nhiễu seed" — kết luận sẽ sai hẳn.
+KHOA_CAU_HINH = ("epochs_run", "batch_size", "lr", "label_smoothing", "optimizer")
+
+
+def _van_tay(data: dict) -> tuple:
+    """Dấu vết cấu hình của một run, để so xem có cùng thí nghiệm không."""
+    tr = data.get("train") or {}
+    da = data.get("data") or {}
+    return (data.get("model"),
+            tuple(tr.get(k) for k in KHOA_CAU_HINH),
+            da.get("img_size"), da.get("preprocess"), da.get("aug_policy"))
+
+
+def collect(pattern: str = "artifacts/runs/*seed*",
+            them_run_goc: bool = True) -> pd.DataFrame:
+    """Gom các run khác seed của CÙNG một cấu hình thành bảng dài.
+
+    ★ VÌ SAO PHẢI THÊM RUN GỐC (`them_run_goc`) ★
+
+    Run chính của mỗi model cũng là MỘT SEED (42), chỉ là nó không có tag
+    `seedN`. Bản đầu của hàm này chỉ khớp `*seed*` nên bỏ nó ra, và bảng
+    mean±std chỉ còn 2 seed thay vì 3.
+
+    Mất mát không nhỏ: chính câu hỏi của phần này là "chênh lệch giữa các model
+    có phải chỉ là nhiễu seed?". Với m2_vggres, 3 seed cho macro-F1 0,98798 /
+    0,99297 / 0,99066 — biên độ 0,50 điểm. Bỏ seed 42 thì biên độ chỉ còn 0,23
+    điểm, tức BÁO CÁO SAI rằng mô hình ổn định hơn thực tế gấp đôi.
+
+    Chỉ thêm run gốc khi cấu hình TRÙNG KHỚP (xem KHOA_CAU_HINH). Nếu run chính
+    train 40 epoch mà run seed train 15 epoch thì chúng không so được, và gộp
+    vào sẽ biến "khác số epoch" thành "nhiễu seed".
+    """
+    rows, van_tay_seed = [], set()
+
+    def them(data: dict) -> None:
         test = data.get("test") or {}
         if not test:
             log.warning("Bỏ qua %s — chưa có số test. Chạy scripts/evaluate.py trước.",
                         data.get("run_id"))
-            continue
+            return
         rows.append({
             "model": data.get("model"),
             "seed": data.get("seed"),
             "run_id": data.get("run_id"),
             **{m: test.get(m) for m in METRICS},
         })
+
+    for path in sorted(glob.glob(f"{pattern}/result.json")):
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
+        them(data)
+        if data.get("test"):
+            van_tay_seed.add(_van_tay(data))
+
+    if them_run_goc and van_tay_seed:
+        da_co = {r["run_id"] for r in rows}
+        for path in sorted(glob.glob("artifacts/runs/*/result.json")):
+            data = json.loads(Path(path).read_text(encoding="utf-8"))
+            if data.get("run_id") in da_co or (data.get("notes") or ""):
+                continue                       # đã có, hoặc là run ablation/thí nghiệm
+            if _van_tay(data) in van_tay_seed:
+                log.info("Thêm run gốc %s (seed %s) — cấu hình TRÙNG với các run seed",
+                         data.get("run_id"), data.get("seed"))
+                them(data)
+
     return pd.DataFrame(rows)
 
 

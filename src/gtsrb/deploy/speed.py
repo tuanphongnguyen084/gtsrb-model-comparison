@@ -125,17 +125,31 @@ def _synchronize(device: torch.device) -> None:
 # nhanh hay chậm. Hai dấu hiệu bù cho nhau: jitter nhạy với model nhanh,
 # tải hệ thống nhạy với mọi model nhưng thô hơn.
 NGUONG_JITTER = 2.0
-# Trừ 1,0 cho chính tiến trình benchmark, rồi chia cho số lõi. Lúc chạy
-# edge_export song song robustness, tải đo được ~4,5 trên 10 lõi -> 0,35.
 NGUONG_TAI_MOI_LOI = 0.25
 
 
-def _tai_moi_loi() -> float | None:
-    """Tải trung bình 1 phút trên mỗi lõi, đã TRỪ phần của chính benchmark."""
+def _tai_moi_loi(loi_cua_minh: float = 1.0) -> float | None:
+    """Tải do TIẾN TRÌNH KHÁC gây ra, trên mỗi lõi.
+
+    ★ BẢN ĐẦU CỦA HÀM NÀY BÁO ĐỘNG SAI ★
+
+    Nó trừ đúng 1,0 cho "phần của chính benchmark", tức ngầm cho rằng benchmark
+    chạy một luồng. Nhưng PyTorch trên CPU mặc định dùng torch.get_num_threads()
+    lõi — ở máy này là 6, và đo được 326% CPU. Nên khi đo EfficientNet-B0 trên
+    một máy HOÀN TOÀN RẢNH, tải đọc được là 5,1 trên 8 lõi, trừ 1,0 còn
+    4,1/8 = 0,51 > 0,25 -> BÁO ĐỘNG dù không có gì khác chạy.
+
+    Đó đúng là thứ hàm này được viết ra để chống: một phép kiểm hay báo động
+    sai sẽ bị phớt đi, rồi lần nó báo đúng cũng không ai tin.
+
+    Cách sửa: `loi_cua_minh` là số lõi mà CHÍNH tiến trình này dùng trong lúc
+    đo, tính từ thời gian CPU thật (time.process_time() đếm CPU của mọi luồng)
+    chia cho thời gian thực. Trừ con số đó thay vì trừ 1,0.
+    """
     try:
         import os
         loi = os.cpu_count() or 1
-        return max(0.0, os.getloadavg()[0] - 1.0) / loi
+        return max(0.0, os.getloadavg()[0] - loi_cua_minh) / loi
     except (OSError, AttributeError):
         return None
 
@@ -167,6 +181,10 @@ def benchmark(model: nn.Module, img_size: int, device: torch.device,
         _synchronize(device)
 
         # --- Đo ---
+        # Bấm cả thời gian CPU của chính tiến trình, để biết nó dùng mấy lõi.
+        # process_time() đếm CPU của MỌI luồng, nên tỉ số này ra đúng số lõi
+        # mà PyTorch đang thật sự dùng (xem _tai_moi_loi).
+        cpu_dau, thuc_dau = time.process_time(), time.perf_counter()
         timings_ms: list[float] = []
         for _ in range(iters):
             _synchronize(device)                 # chắc chắn mọi việc trước đã xong
@@ -175,6 +193,9 @@ def benchmark(model: nn.Module, img_size: int, device: torch.device,
             _synchronize(device)                 # chờ tính xong MỚI bấm giờ kết thúc
             timings_ms.append((time.perf_counter() - start) * 1000.0)
 
+        thuc_het = time.perf_counter() - thuc_dau
+        loi_cua_minh = ((time.process_time() - cpu_dau) / thuc_het
+                        if thuc_het > 0 else 1.0)
         array = np.array(timings_ms)
         prefix = f"{device.type}_bs{batch_size}"
         results[f"{prefix}_p50"] = float(np.percentile(array, 50))
@@ -191,12 +212,14 @@ def benchmark(model: nn.Module, img_size: int, device: torch.device,
 
         log.info("  %-14s p50=%7.2f ms  p95=%7.2f ms  (%.0f ảnh/s)  p95/p50=%.2f",
                  prefix, p50, p95, results[f"{prefix}_imgs_per_sec"], jitter)
-        tai = _tai_moi_loi()
+        tai = _tai_moi_loi(loi_cua_minh)
+        results[f"{prefix}_loi_dung"] = round(loi_cua_minh, 2)
         ly_do = []
         if jitter > NGUONG_JITTER:
             ly_do.append(f"p95/p50 = {jitter:.2f} > {NGUONG_JITTER:.1f}")
         if tai is not None and tai > NGUONG_TAI_MOI_LOI:
-            ly_do.append(f"tải {tai:.2f}/lõi > {NGUONG_TAI_MOI_LOI:.2f}")
+            ly_do.append(f"tải NGOÀI {tai:.2f}/lõi > {NGUONG_TAI_MOI_LOI:.2f} "
+                         f"(đã trừ {loi_cua_minh:.1f} lõi của chính phép đo)")
         if ly_do:
             log.warning("  ★ MÁY ĐANG BẬN (%s) — số latency này có thể chậm "
                         "1,3-2,3 lần so với thực tế. Đóng các việc nặng khác rồi "
