@@ -119,3 +119,58 @@ def test_split_random_CO_ro_ri__doi_chung():
     # Con số này chính là bằng chứng đưa vào báo cáo
     print(f"\n  ĐỐI CHỨNG: split random cho {leaky['n_shared_tracks']} track "
           f"dùng chung giữa train và val (split theo track cho 0).")
+
+
+# =====================================================================
+# Cái bẫy: track_id MỘT MÌNH không định danh được biển báo
+# =====================================================================
+
+def test_track_id_mot_minh_KHONG_dinh_danh_duoc_bien_bao():
+    """★ Nhóm phải là (class_id, track_id), KHÔNG được chỉ track_id.
+
+    GTSRB đánh số track LẠI TỪ ĐẦU trong mỗi lớp: lớp 0 có track 0..N, lớp 1
+    cũng có track 0..M. Nên `track_id` một mình bị dùng chung giữa các lớp.
+
+    Số đo thật trên index.csv của dự án:
+
+        nhóm theo track_id        ->    75 nhóm / 39.209 ảnh = 523 ảnh/nhóm (VÔ LÝ)
+        nhóm theo (class, track)  -> 1.307 nhóm / 39.209 ảnh =  30 ảnh/nhóm (ĐÚNG)
+
+    30 ảnh/nhóm khớp đặc tả GTSRB: mỗi biển báo vật lý được quay 30 frame.
+
+    Hậu quả nếu ai "tối giản" `groups` về chỉ `track_id`: StratifiedGroupKFold
+    sẽ gom các biển báo KHÁC NHAU của các lớp khác nhau vào cùng một nhóm, rồi
+    chia nhóm đó nguyên khối — split trông vẫn "group-aware" và check_leakage
+    kiểu cũ vẫn báo 0, nhưng phân phối lớp sẽ vỡ và nhiều lớp mất hẳn khỏi val.
+    Test này chặn đúng việc đó.
+    """
+    frame = pd.read_csv(INDEX_CSV)
+    pool = frame[frame["split"].isin(["train", "val"])]
+
+    chi_track = pool["track_id"].nunique()
+    doi = pool.groupby(["class_id", "track_id"]).ngroups
+
+    assert doi > chi_track * 5, (
+        f"khoá đôi phải cho NHIỀU nhóm hơn hẳn: {doi} vs {chi_track}. "
+        f"Nếu hai số gần nhau thì track_id đã là duy nhất toàn cục và chú thích "
+        f"trong split.py cần xem lại.")
+
+    anh_moi_nhom = len(pool) / doi
+    assert 25 <= anh_moi_nhom <= 35, (
+        f"{anh_moi_nhom:.1f} ảnh mỗi nhóm — GTSRB quay 30 frame/biển báo, nên "
+        f"con số này phải quanh 30. Lệch nhiều nghĩa là khoá nhóm sai.")
+
+
+def test_make_split_dung_khoa_DOI_khong_phai_track_id_don():
+    """Đọc trực tiếp nguồn make_split để chắc nó ghép class_id vào groups."""
+    import inspect
+
+    from gtsrb.data import split as mod
+    src = inspect.getsource(mod.make_split)
+    dong_groups = [l.strip() for l in src.splitlines()
+                   if "groups" in l and "=" in l and "fake" not in l]
+    assert dong_groups, "không tìm thấy dòng gán `groups` trong make_split"
+    ghep = "\n".join(dong_groups)
+    assert "class_id" in ghep, (
+        f"`groups` không có class_id — đây là lỗi RÒ RỈ IM LẶNG.\n"
+        f"Dòng tìm được:\n{ghep}")
