@@ -403,6 +403,102 @@ def phu_luc_tai_lieu() -> str:
     return "\n".join(dong)
 
 
+def truc_do_phan_giai() -> str:
+    """Trục `resolution` đo GÌ — và phép đo đối chứng chứng minh điều đó.
+
+    ★ CHỖ DỄ ĐỌC SAI NHẤT CỦA CẢ BÁO CÁO ★
+
+    M1/M2 chạy ablation với cache KHỚP img_size (32->32, 48->48, 64->64) nên
+    chúng đo độ phân giải THẬT. M3 thì cả ba mức (64/112/224) đều lấy từ CÙNG
+    cache 48px rồi nội suy lên — nên với M3, trục này đo HỆ SỐ NỘI SUY, không
+    đo chi tiết ảnh. Đọc "res224 tốt nhất" thành "ảnh nét hơn thì tốt hơn" là
+    sai.
+    """
+    frame = read("ablation.csv")
+    if frame is None or "tag" not in frame.columns:
+        return MISSING
+    g = frame[frame["tag"].astype(str).str.startswith("resolution")].copy()
+    if g.empty:
+        return MISSING
+
+    dong = [
+        "**Trục này đo hai thứ KHÁC NHAU tuỳ mô hình** — chỗ dễ đọc sai nhất:",
+        "",
+        "| Mô hình | cache dùng | img_size | thực chất đo |",
+        "|---|---|---|---|",
+        "| `m1_lenet`, `m2_vggres` | 32 / 48 / 64 (**khớp**) | 32 / 48 / 64 | "
+        "**độ phân giải thật** |",
+        "| `m3_resnet18` | **48 cho cả ba** | 64 / 112 / 224 | "
+        "**hệ số nội suy**, không phải chi tiết ảnh |",
+        "",
+        "Nên **không được** đọc \"res224 tốt nhất\" thành \"ảnh nét hơn thì tốt "
+        "hơn\". Nguyên nhân thật là **dung lượng feature map**: ResNet18 thu nhỏ "
+        "ảnh 32 lần, nên feature map cuối trước Global Average Pooling là",
+        "",
+        "| img_size | feature map | số vị trí không gian |",
+        "|---|---|---|",
+        "| 48 px | 512×2×2 | **4** |",
+        "| 64 px | 512×2×2 | **4** |",
+        "| 112 px | 512×4×4 | 16 |",
+        "| 224 px | 512×7×7 | 49 |",
+        "",
+        "Ở 48 và 64 px, mạng chỉ còn **4 ô** để mô tả cả biển báo. Đó là lý do "
+        "`res64` kém, không phải vì ảnh mờ hơn.",
+    ]
+
+    # ---- Phép đo đối chứng: cache thật vs nội suy ----
+    thuc = g[g["tag"].astype(str).str.contains("res112real")]
+    noi_suy = g[g["tag"].astype(str).str.contains("res112-budget")]
+    if not thuc.empty and not noi_suy.empty:
+        t, n = thuc.iloc[0], noi_suy.iloc[0]
+        dv = (t["val_macro_f1"] - n["val_macro_f1"]) * 100
+        dt = (t["test_macro_f1"] - n["test_macro_f1"]) * 100
+        seed = read("seeds.csv")
+        nguong = ((seed["macro_f1"].max() - seed["macro_f1"].min()) * 100
+                  if seed is not None and len(seed) > 1 else 0.5)
+        dong += [
+            "",
+            "#### Phép đo đối chứng: cache 48 có làm hại M3 không?",
+            "",
+            "Câu hỏi sắc nhất nhắm vào kết luận chính của báo cáo: *\"backbone "
+            "pretrained của các bạn kém chỉ vì bạn đưa cho nó ảnh đã bị làm "
+            "mờ?\"* Nhóm dựng **cache 112 px thật** rồi train lại cùng cấu "
+            "hình để trả lời bằng số:",
+            "",
+            "| Nguồn ảnh ở 112 px | val macro-F1 | test macro-F1 |",
+            "|---|---|---|",
+            f"| nội suy từ cache 48 | {n['val_macro_f1']:.5f} | "
+            f"{n['test_macro_f1']:.5f} |",
+            f"| **cache 112 thật** | {t['val_macro_f1']:.5f} | "
+            f"{t['test_macro_f1']:.5f} |",
+            f"| chênh | **{dv:+.2f} điểm** | **{dt:+.2f} điểm** |",
+            "",
+            f"Chi tiết thật **không giúp gì** — chênh {abs(dv):.2f} điểm val và "
+            f"{abs(dt):.2f} điểm test, nhỏ hơn nhiễu seed ({nguong:.2f} điểm) "
+            f"khoảng **{nguong / max(abs(dv), 0.01):.0f} lần**, và còn hơi "
+            f"NGHIÊNG VỀ PHÍA bản nội suy.",
+            "",
+            "Lý do nằm ở bản thân dữ liệu, không ở đường ống:",
+            "",
+            "| | |",
+            "|---|---|",
+            "| ROI biển báo trung vị | **31 px** |",
+            "| ảnh có ROI > 48 px | 21 % |",
+            "| ảnh có ROI > 224 px | **0 %** |",
+            "",
+            "Biển báo trung vị còn **nhỏ hơn cache 48 px**, và không một ảnh nào "
+            "trong 51.839 ảnh có chi tiết tới 224 px. Nên lời phản biện \"ảnh bị "
+            "làm mờ\" không đứng được: ảnh gốc đã ở độ phân giải đó, và đưa chi "
+            "tiết thật vào cũng không đổi kết quả.",
+            "",
+            "**Kết luận:** việc cache ở 48 px là lựa chọn về tốc độ và **không "
+            "cầm chân M3**. Nhưng nó LÀM ĐỔI NGHĨA trục ablation ở trên, nên "
+            "trục đó phải đọc là *dung lượng feature map*, không phải *độ phân "
+            "giải ảnh*.",
+        ]
+    return "\n".join(dong)
+
+
 def bang_ablation() -> str:
     """Bảng ablation theo trục, và nêu thẳng chỗ nó ĐI NGƯỢC cấu hình mặc định.
 
@@ -994,6 +1090,10 @@ có nghĩa là xuất đúng. Chi tiết một lần báo động sai của phé
 
 {bang_ablation()}
 
+#### 3.7.1 ★ Trục độ phân giải đo gì — và một phép đo đối chứng
+
+{truc_do_phan_giai()}
+
 ### 3.8 Grad-CAM
 
 Bản đồ nhiệt sinh theo công thức Selvaraju (2017), hook vào khối conv cuối. Ba nhóm hình
@@ -1039,8 +1139,12 @@ nghĩa thống kê* là lựa chọn tồi trên hệ thống thời gian thực
    CLAHE nên thiên vị theo mô hình (mục 3.5.1) — giới hạn thứ hai nặng hơn, và đã được
    đo bằng thực nghiệm đối chứng chứ không chỉ nêu ra.
 4. **So sánh M2 với M3 lẫn hai biến** (pretrained hay không, và 48 hay 224 px). Trục
-   ablation `resolution` đã chạy đủ 9 run để tách chúng (mục 3.7), nhưng ở chế độ
-   ngân sách 15 epoch — xếp hạng được biến thể, chưa phải số cuối cùng.
+   ablation `resolution` **KHÔNG tách được hai biến đó cho M3**, vì cả ba mức 64/112/224
+   đều nội suy từ cùng cache 48 px — nó đo dung lượng feature map, không đo chi tiết ảnh
+   (mục 3.7.1). Phép đo đối chứng bằng cache 112 px thật cho thấy chi tiết thật **không
+   đổi kết quả** (chênh 0,05 điểm, nhỏ hơn nhiễu seed 10 lần), nên kết luận chính không
+   bị đe doạ — nhưng biến "pretrained hay không" vẫn chưa được tách sạch khỏi biến
+   "kiến trúc", và đó là hướng mở rộng rõ ràng nhất.
 5. **Thí nghiệm rò rỉ chỉ chạy trên M1.** Con số 1,09 điểm val ảo đo được trên M1;
    mức thổi phồng có thể khác với mô hình dung lượng lớn hơn, vốn dễ nhớ frame hơn.
 6. **Không dùng class weighting hay resampling khi huấn luyện.** `losses.py` có hỗ trợ

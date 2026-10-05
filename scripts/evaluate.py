@@ -122,8 +122,43 @@ def save_confusion(model_key: str, stats: dict,
 # =====================================================================
 
 def build_main_table(rows: list[dict], out_path: Path) -> pd.DataFrame:
-    """Gộp mọi run thành một bảng, sắp theo macro-F1 giảm dần."""
+    """Gộp mọi run thành một bảng, sắp theo macro-F1 giảm dần.
+
+    ★ CẢNH BÁO khi GHI ĐÈ bảng cũ bằng ÍT run hơn ★
+
+    LỖI ĐÃ GẶP: chạy `evaluate.py --runs "artifacts/runs/*res112real*"` để lấy
+    số test cho MỘT run, và nó ghi đè main_comparison.csv từ 7 dòng xuống còn
+    1 dòng — dòng duy nhất đó lại là một run ablation (có tag), nên bảng so
+    sánh chính KHÔNG CÒN RUN CHÍNH NÀO. make_report.py crash ngay sau đó, và
+    nếu nó không crash thì báo cáo sẽ sinh ra với bảng chính trống.
+
+    Hàm này không tự chối ghi — người dùng có thể thật sự muốn vậy. Nhưng nó
+    phải NÓI TO, vì mất bảng chính là mất thứ cả báo cáo dựa vào.
+    """
     frame = pd.DataFrame(rows).sort_values("test_macro_f1", ascending=False)
+
+    if out_path.exists():
+        try:
+            cu = pd.read_csv(out_path)
+            def dem_chinh(f: pd.DataFrame) -> int:
+                if "tag" not in f.columns:
+                    return len(f)
+                t = f["tag"]
+                return int((t.isna() | t.astype(str).isin(("", "(chính)"))).sum())
+            n_cu, n_moi = dem_chinh(cu), dem_chinh(frame)
+            if n_moi < n_cu:
+                log.warning("")
+                log.warning("=" * 68)
+                log.warning("★ GHI ĐÈ %s BẰNG ÍT RUN HƠN", out_path.name)
+                log.warning("  run CHÍNH: %d -> %d  (tổng dòng: %d -> %d)",
+                            n_cu, n_moi, len(cu), len(frame))
+                log.warning("  Nếu bạn chỉ muốn lấy số test cho vài run thì hãy")
+                log.warning("  chạy lại với --runs \"artifacts/runs/*\" sau đó,")
+                log.warning("  nếu không báo cáo sẽ sinh ra với bảng chính thiếu.")
+                log.warning("=" * 68)
+        except Exception as exc:                 # bảng cũ hỏng thì cứ ghi mới
+            log.debug("không đọc được bảng cũ: %s", exc)
+
     out_path.parent.mkdir(parents=True, exist_ok=True)
     frame.to_csv(out_path, index=False)
 

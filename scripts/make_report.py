@@ -151,6 +151,11 @@ def table_confusions() -> str:
 # Các đoạn văn giải thích — tách riêng để main() chỉ còn việc ghép
 # =====================================================================
 
+# Câu nhắc khi một bảng chưa có dữ liệu. Thiếu hằng này thì
+# section_recommendation() crash với NameError thay vì in ra lời nhắc —
+# lỗi tiềm ẩn, chỉ nổ khi main_comparison.csv không có run CHÍNH nào.
+MISSING = "_(chưa có dữ liệu)_"
+
 NOTE_MAIN_TABLE = """**Cách đọc bảng — ba điều phải nói khi trình bày:**
 
 1. **Top-5 gần như vô nghĩa ở đây.** Top-5 ra đời cho ImageNet **1000** lớp. Trên **43**
