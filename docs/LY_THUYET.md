@@ -9,12 +9,14 @@
 
 ---
 
----
-
 ## Bản đồ: mở file code nào thì đọc mục nào
 
 Dùng bảng này khi bạn đang đọc một file và muốn biết lý thuyết đằng sau nó.
 Chiều ngược lại (đọc lý thuyết rồi muốn xem code) nằm ở dòng `📁 Code:` dưới mỗi mục.
+
+> **Đường dẫn trong bảng tính từ `src/gtsrb/`.** Ví dụ `data/dataset.py` là
+> `src/gtsrb/data/dataset.py`. Các dòng `📁 Code:` phía dưới cũng viết tắt như
+> vậy khi đã nêu đường dẫn đầy đủ ở ngay trước.
 
 | File code | Đọc mục | Khái niệm chính |
 |---|---|---|

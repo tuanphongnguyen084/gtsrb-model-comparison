@@ -4,7 +4,7 @@
 > **Đừng sửa tay** — lần chạy sau sẽ ghi đè.
 > Mọi số đều truy được về một `artifacts/runs/<run_id>/result.json` cụ thể.
 >
-> Cập nhật lần cuối: 2026-10-05 11:40 · 39 run
+> Cập nhật lần cuối: 2026-10-05 12:04 · 39 run
 
 ---
 

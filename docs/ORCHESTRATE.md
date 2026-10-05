@@ -134,7 +134,7 @@ không phải vấn đề style). ★ Bước chặn — C đang chờ.
 **Tags**: impl · **Chain**: `tdd-guide` → `python-reviewer`
 
 ```bash
-/ecc:feature-dev Hiện thực src/gtsrb/models/m1_lenet.py và registry.py theo docs/INTERFACE.md mục 2. M1: Conv(3->32,5x5,pad=2)+ReLU+MaxPool2, Conv(32->64,5x5,pad=2)+ReLU+MaxPool2, Flatten(64*12*12=9216), FC(256)+ReLU+Dropout(0.5), FC(43). CỐ Ý không BatchNorm không residual - M1 là mốc tham chiếu để đo đóng góp của các thành phần trong M2. build_model phải trả model có .gradcam_target_layer, .model_name, .expected_img_size, .normalize_mode. Acceptance: test top-1 >= 95%; bảng đếm tham số từng lớp ra reports/tables/m1_params.csv và chỉ ra lớp FC đầu chiếm khoảng 96% tổng tham số; model không vỡ khi đổi img_size trong config. Out of scope: tinh chỉnh M1 để đẩy accuracy - nó là baseline, giữ đơn giản.
+/ecc:feature-dev Hiện thực src/gtsrb/models/m1_lenet.py và registry.py theo docs/INTERFACE.md mục 2. M1: Conv(3->32,5x5,pad=2)+ReLU+MaxPool2, Conv(32->64,5x5,pad=2)+ReLU+MaxPool2, Flatten(64*12*12=9216), FC(256)+ReLU+Dropout(0.5), FC(43). CỐ Ý không BatchNorm không residual - M1 là mốc tham chiếu để đo đóng góp của các thành phần trong M2. build_model phải trả model có .gradcam_target_layer, .model_name, .expected_img_size, .normalize_mode. Acceptance: test top-1 >= 95%; bảng đếm tham số từng lớp ra reports/tables/m1_lenet_params.csv và chỉ ra lớp FC đầu chiếm khoảng 96% tổng tham số; model không vỡ khi đổi img_size trong config. Out of scope: tinh chỉnh M1 để đẩy accuracy - nó là baseline, giữ đơn giản.
 ```
 
 ---
@@ -164,7 +164,7 @@ không phải vấn đề style). ★ Bước chặn — C đang chờ.
 **Tags**: impl, review · **Chain**: `tdd-guide` → **`ecc:mle-reviewer`**
 
 ```bash
-/ecc:feature-dev Hiện thực src/gtsrb/eval/{metrics,confusion,stats_tests,calibration}.py theo docs/INTERFACE.md mục 4. evaluate() trả dict cố định gồm top1, top5, macro_f1, weighted_f1, per_class DataFrame 43 dòng, y_true, y_pred, y_prob. mcnemar(y_true,y_pred_a,y_pred_b) dùng chi2 có hiệu chỉnh liên tục Yates khi n01+n10>=25, binomial chính xác khi nhỏ hơn - KHÔNG dùng t-test độc lập vì 2 model chạy trên cùng tập test nên quan sát bắt cặp. expected_calibration_error với 15 bin. confusion matrix 43x43 + top-10 cặp nhầm nhiều nhất. Acceptance: evaluate chạy đúng cho cả 3 model qua cùng API; reports/tables/per_class.csv có 43 dòng; McNemar in p-value cho cả 3 cặp model; confusion matrix lưu ra reports/figures. Out of scope: bootstrap CI từng lớp.
+/ecc:feature-dev Hiện thực src/gtsrb/eval/{metrics,confusion,stats_tests,calibration}.py theo docs/INTERFACE.md mục 4. evaluate() trả dict cố định gồm top1, top5, macro_f1, weighted_f1, per_class DataFrame 43 dòng, y_true, y_pred, y_prob. mcnemar(y_true,y_pred_a,y_pred_b) dùng chi2 có hiệu chỉnh liên tục Yates khi n01+n10>=25, binomial chính xác khi nhỏ hơn - KHÔNG dùng t-test độc lập vì 2 model chạy trên cùng tập test nên quan sát bắt cặp. expected_calibration_error với 15 bin. confusion matrix 43x43 + top-10 cặp nhầm nhiều nhất. Acceptance: evaluate chạy đúng cho cả 3 model qua cùng API; reports/tables/per_class_<model>.csv có 43 dòng; McNemar in p-value cho cả 3 cặp model; confusion matrix lưu ra reports/figures. Out of scope: bootstrap CI từng lớp.
 ```
 
 ---

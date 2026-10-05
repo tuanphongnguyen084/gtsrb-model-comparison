@@ -27,6 +27,12 @@ thop>=0.1.1
 # Xuất ONNX cho triển khai biên (src/gtsrb/deploy/export.py)
 onnx>=1.16
 onnxscript>=0.1
+# ★ onnxruntime KHÔNG phải tuỳ chọn ★
+# Thiếu nó thì verify_onnx() chỉ ghi một dòng cảnh báo rồi return False, và 4
+# test ONNX trong tests/test_export.py LẶNG LẼ bị skip (pytest.importorskip).
+# Nghĩa là bản ONNX được xuất mà KHÔNG AI KIỂM, đúng loại lỗi im lặng mà
+# docs/SU_CO.md §9 nói tới. Nó từng thiếu ở đây suốt dự án.
+onnxruntime>=1.17
 
 # Notebook
 jupyter>=1.0

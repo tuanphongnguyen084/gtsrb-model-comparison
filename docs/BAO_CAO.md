@@ -109,7 +109,7 @@ Xoay ±15°, dịch ±10%, zoom 0,9–1,1, jitter độ sáng/tương phản ±0
 **Một quan sát đáng chú ý về số tham số:** M1 có **2.424.299** tham số với **2** lớp conv,
 trong đó **97,3%** nằm ở *một* lớp `Flatten(9216) → FC(256)`. M2 có **9** lớp conv nhưng
 chỉ **1.237.451** tham số — **ít hơn M1** — vì nó thay Flatten+FC bằng Global Average
-Pooling (11.051 tham số, giảm ~213 lần ở phần head). Bài học: **số lớp không tỉ lệ với số
+Pooling (11.051 tham số, giảm **214 lần** ở phần head). Bài học: **số lớp không tỉ lệ với số
 tham số; chỗ đắt là lớp fully-connected.**
 
 M3 dùng mean/std của **ImageNet** (không phải của GTSRB) vì trọng số pretrained và
@@ -239,13 +239,17 @@ Bảng `relative robustness` = accuracy dưới nhiễu / accuracy trên ảnh s
 | m3_mobilenetv2 | 0.7045 |        0.2408 |      0.0881 |        0.9973 |      0.3874 | 0.5225 |       0.9873 |
 | m3_resnet18    | 0.9336 |        0.684  |      0.5576 |        0.9995 |      0.4408 | 0.2817 |       0.9933 |
 
-Trên 5 mô hình, xét **3 loại nhiễu so sánh được** (`gauss_noise`, `low_light`, `occlusion`):
+**Chỉ số dưới đây KHÔNG phải cột `mCE` của bảng trên.** `mCE` tính trên **cả 5 loại nhiễu**, kể cả `motion_blur` và `fog` — hai loại **không so sánh được** giữa 48×48 và 224×224 (xem cảnh báo bên dưới). Chỉ số dưới đây chỉ dùng **3 loại so sánh được** (`gauss_noise`, `low_light`, `occlusion`), nên con số CAO HƠN và thứ hạng có thể khác.
 
-**Mô hình chính xác nhất trên ảnh sạch KHÔNG phải mô hình bền nhất.** `m3_resnet18` dẫn đầu khi ảnh sạch (top-1 = 0.9933) nhưng `m1_lenet` mới là mô hình bền nhất (error trung bình dưới nhiễu = 0.2812 so với 0.4429).
+Và thứ hạng **đổi thật**: theo `mCE` là `m1_lenet` < `m3_resnet18` < `m2_vggres` < `m3_mobilenetv2` < `m3_effnetb0`; theo 3 nhiễu so sánh được thì khác (xem dòng cuối mục này). Kết luận của nhóm rút từ nhóm nhiễu so sánh được.
+
+Trên 5 mô hình:
+
+**Mô hình chính xác nhất trên ảnh sạch KHÔNG phải mô hình bền nhất.** `m3_resnet18` dẫn đầu khi ảnh sạch (top-1 = 0.9933) nhưng `m1_lenet` mới là mô hình bền nhất (error trên 3 nhiễu so sánh được = 0.2812 so với 0.4429).
 
 Đáng chú ý hơn: `m1_lenet` — **yếu nhất** trên ảnh sạch (top-1 = 0.9846) — lại bền nhất. Thứ tự xếp hạng khi có nhiễu **đảo lại** so với khi không có.
 
-Xếp hạng độ bền (error trung bình dưới nhiễu, càng THẤP càng bền): `m1_lenet` 0.2812 < `m2_vggres` 0.3388 < `m3_resnet18` 0.4429 < `m3_mobilenetv2` 0.7643 < `m3_effnetb0` 0.7873.
+Xếp hạng độ bền **theo 3 nhiễu so sánh được** (càng THẤP càng bền): `m1_lenet` 0.2812 < `m2_vggres` 0.3388 < `m3_resnet18` 0.4429 < `m3_mobilenetv2` 0.7643 < `m3_effnetb0` 0.7873.
 
 ⚠️ **Giới hạn phương pháp cần nêu rõ:** nhiễu được áp **sau khi** resize, mà M1/M2 chạy ở
 48×48 còn M3 ở 224×224. Kernel motion blur mức 5 là **15 pixel tuyệt đối**: ở 48×48 nó phủ
@@ -326,7 +330,7 @@ chạy bất đồng bộ — không đồng bộ thì đang đo thời gian *g�
 | m3_effnetb0    |        0.83 |             243.43 |          294.1 |
 
 Nếu latency tỉ lệ FLOPs thì cột cuối phải bằng nhau — thực tế chênh **64 lần**.
-EfficientNet-B0 có **ít hơn ResNet18 4,4 lần FLOPs** nhưng chậm hơn **14 lần** trên CPU.
+EfficientNet-B0 **ít hơn ResNet18 4.4 lần FLOPs** nhưng chậm hơn **14.6 lần** trên CPU.
 Nguyên nhân: MBConv + squeeze-excitation gồm rất nhiều lớp **mảnh**, mỗi lớp tốn chi phí
 cố định (launch kernel, truy cập bộ nhớ) mà làm rất ít phép tính → bị chặn bởi **băng
 thông bộ nhớ**, không bởi năng lực tính toán.
@@ -335,7 +339,68 @@ thông bộ nhớ**, không bởi năng lực tính toán.
 nhất trong cả 5.** Muốn nói về triển khai thì phải đo wall-clock trên thiết
 bị đích.
 
-### 3.7 Grad-CAM
+### 3.7 Ablation — đổi một biến một lần
+
+**30 run**, mỗi run đổi **đúng một biến** so với cấu hình gốc, ở chế độ ngân sách **15 epoch**. Chế độ này để **xếp hạng** biến thể, không phải để lấy số cuối cùng — cấu hình thắng cần chạy lại ở độ dài đầy đủ trước khi đưa vào bảng so sánh chính.
+
+| trục            | biến thể            | model       |   test_top1 |   test_macro_f1 |
+|:----------------|:--------------------|:------------|------------:|----------------:|
+| augmentation    | aug_none            | m2_vggres   |     0.98709 |         0.98344 |
+| augmentation    | aug_geo_photo_erase | m2_vggres   |     0.98709 |         0.98148 |
+| augmentation    | aug_geo_photo       | m2_vggres   |     0.98852 |         0.98106 |
+| augmentation    | aug_geo             | m2_vggres   |     0.98686 |         0.9808  |
+| components      | no_spatial_dropout  | m2_vggres   |     0.99066 |         0.98777 |
+| components      | no_residual         | m2_vggres   |     0.98709 |         0.98504 |
+| components      | full                | m2_vggres   |     0.98852 |         0.98106 |
+| components      | no_bn               | m2_vggres   |     0.98575 |         0.97935 |
+| label_smoothing | ls0.1               | m2_vggres   |     0.98852 |         0.98106 |
+| label_smoothing | ls0.0               | m2_vggres   |     0.98844 |         0.97965 |
+| label_smoothing | ls0.2               | m2_vggres   |     0.98717 |         0.97912 |
+| preprocess      | prep_he_y           | m2_vggres   |     0.99153 |         0.98855 |
+| preprocess      | prep_he_gray        | m2_vggres   |     0.98986 |         0.98514 |
+| preprocess      | prep_clahe          | m2_vggres   |     0.98852 |         0.98106 |
+| preprocess      | prep_none           | m2_vggres   |     0.98583 |         0.97874 |
+| resolution      | res224              | m3_resnet18 |     0.99327 |         0.9903  |
+| resolution      | res112              | m3_resnet18 |     0.9924  |         0.98718 |
+| resolution      | res48               | m2_vggres   |     0.98852 |         0.98106 |
+| resolution      | res48               | m1_lenet    |     0.98472 |         0.97869 |
+| resolution      | res64               | m3_resnet18 |     0.98709 |         0.97758 |
+| resolution      | res64               | m1_lenet    |     0.98187 |         0.97737 |
+| resolution      | res32               | m2_vggres   |     0.98622 |         0.97711 |
+| resolution      | res64               | m2_vggres   |     0.98369 |         0.97489 |
+| resolution      | res32               | m1_lenet    |     0.97902 |         0.966   |
+| scaling         | width2.0            | m2_vggres   |     0.98971 |         0.98626 |
+| scaling         | depth5              | m2_vggres   |     0.99066 |         0.98468 |
+| scaling         | depth4              | m2_vggres   |     0.98852 |         0.98106 |
+| scaling         | width1.0            | m2_vggres   |     0.98852 |         0.98106 |
+| scaling         | depth3              | m2_vggres   |     0.95455 |         0.90452 |
+| scaling         | width0.5            | m2_vggres   |     0.94782 |         0.89719 |
+
+**★ 4/6 trục cho kết quả ĐI NGƯỢC cấu hình mặc định của dự án:**
+
+- **augmentation** (`m2_vggres`): tốt nhất là `aug_none` (0.98344), cao hơn mặc định `aug_geo_photo` (0.98106) **0.24 điểm**.
+- **components** (`m2_vggres`): tốt nhất là `no_spatial_dropout` (0.98777), cao hơn mặc định `full` (0.98106) **0.67 điểm**.
+- **preprocess** (`m2_vggres`): tốt nhất là `prep_he_y` (0.98855), cao hơn mặc định `prep_clahe` (0.98106) **0.75 điểm**.
+- **scaling** (`m2_vggres`): tốt nhất là `width2.0` (0.98626), cao hơn mặc định `depth4` (0.98106) **0.52 điểm**.
+
+Ba điều phải nói khi trình bày, không được bỏ:
+
+1. **15 epoch là quá ngắn để augmentation và regularisation trả lãi.** Augmentation, dropout và label smoothing đều làm bài toán huấn luyện KHÓ hơn để đổi lấy khái quát tốt hơn về sau. Ở 15 epoch, phần 'khó hơn' đã tới mà phần 'tốt hơn' chưa tới. Mô hình chính chạy 40 epoch, nên không thể dùng bảng này để kết luận 'augmentation vô dụng'.
+2. **Mỗi ô ở đây là MỘT seed.** Biên độ seed đo được của M2 là **0,50 điểm macro-F1** (mục 3.5.2). Mọi chênh lệch nhỏ hơn con số đó trong bảng trên **không kết luận được gì** — phần lớn các trục có biên độ dưới 1 điểm.
+3. **Nhóm KHÔNG đổi cấu hình mặc định theo bảng này**, vì (1) và (2). Đây là bước xếp hạng để biết nên chạy lại cái gì ở độ dài đầy đủ, không phải kết luận.
+
+**Trục nào thật sự đáng kết luận?** So biên độ từng trục với biên độ seed:
+
+- `augmentation`: biên độ 0.26 điểm — NẰM TRONG nhiễu seed (0.50 điểm)
+- `components`: biên độ 0.84 điểm — **vượt** nhiễu seed (0.50 điểm)
+- `label_smoothing`: biên độ 0.19 điểm — NẰM TRONG nhiễu seed (0.50 điểm)
+- `preprocess`: biên độ 0.98 điểm — **vượt** nhiễu seed (0.50 điểm)
+- `resolution`: biên độ 2.43 điểm — **vượt** nhiễu seed (0.50 điểm)
+- `scaling`: biên độ 8.91 điểm — **vượt** nhiễu seed (0.50 điểm)
+
+Chỉ những trục **vượt 0.50 điểm** mới đáng rút kết luận từ một seed. Các trục còn lại cần nhiều seed mới nói được gì.
+
+### 3.8 Grad-CAM
 
 Bản đồ nhiệt sinh theo công thức Selvaraju (2017), hook vào khối conv cuối. Ba nhóm hình
 cho mỗi mô hình: dự đoán đúng, **dự đoán sai**, và cùng một ảnh trước/sau khi thêm nhiễu.
@@ -375,9 +440,13 @@ nghĩa thống kê* là lựa chọn tồi trên hệ thống thời gian thực
    của bước đó sẽ cộng dồn vào.
 2. **Phân phối test giống phân phối train** — cùng chụp ở Đức, cùng loại camera. Chưa kiểm
    được khả năng khái quát sang biển báo nước khác.
-3. **Mức độ nhiễu không so sánh được giữa các độ phân giải** đối với motion blur (mục 3.5).
-4. **So sánh M2 với M3 lẫn hai biến** (pretrained hay không, và 48 hay 224 px). Ablation
-   độ phân giải là bước cần thiết để tách chúng — đã chuẩn bị nhưng chưa chạy.
+3. **Phép đo robustness có hai giới hạn đã lượng hoá:** mức độ nhiễu không so sánh được
+   giữa các độ phân giải đối với motion blur (mục 3.5), và nhiễu được áp **sau** bước
+   CLAHE nên thiên vị theo mô hình (mục 3.5.1) — giới hạn thứ hai nặng hơn, và đã được
+   đo bằng thực nghiệm đối chứng chứ không chỉ nêu ra.
+4. **So sánh M2 với M3 lẫn hai biến** (pretrained hay không, và 48 hay 224 px). Trục
+   ablation `resolution` đã chạy đủ 9 run để tách chúng (mục 3.7), nhưng ở chế độ
+   ngân sách 15 epoch — xếp hạng được biến thể, chưa phải số cuối cùng.
 5. **Chỉ M2 được chạy nhiều seed** (3 seed); bốn mô hình còn lại một seed. Biên độ seed đo
    được của M2 dùng làm thước đo nhiễu cho cả bảng, nhưng đó là phép ngoại suy.
 6. **Chưa kiểm adversarial robustness** (FGSM/PGD) — khác bản chất với nhiễu tự nhiên.
@@ -432,10 +501,12 @@ Mỗi file mã nguồn ghi rõ `CHỦ: <tên>` ở đầu docstring.
 
 | File | Nội dung |
 |---|---|
-| `docs/KET_QUA.md` | toàn bộ bảng số, sinh tự động |
-| `docs/LY_THUYET.md` | cơ sở lý thuyết, công thức, lý do từng lựa chọn thiết kế |
-| `docs/SU_CO.md` | 9 nhóm sự cố đã gặp trong quá trình làm, kèm nguyên nhân và cách sửa |
-| `docs/PHAN_CONG.md` | phân công chi tiết + 38 câu hỏi ôn tập |
-| `reports/tables/` | 20 bảng CSV |
-| `reports/figures/` | 31 hình |
-| `notebooks/` | 10 notebook có diễn giải |
+| `docs/KET_QUA.md` | toàn bộ bảng số, sinh tự động (331 dòng) |
+| `docs/LY_THUYET.md` | cơ sở lý thuyết, công thức, lý do từng lựa chọn thiết kế; có bản đồ code ↔ lý thuyết (942 dòng) |
+| `docs/SU_CO.md` | **13 sự cố** đã gặp thật, kèm nguyên nhân, cách sửa và test chặn (385 dòng) |
+| `docs/PHAN_CONG.md` | phân công theo người, kèm khái niệm mỗi người phải nắm (216 dòng) |
+| `docs/INTERFACE.md` | hợp đồng giữa các phần: chữ ký hàm, schema `result.json` (276 dòng) |
+| `reports/tables/` | **26 bảng CSV** |
+| `reports/figures/` | **37 hình** |
+| `notebooks/` | **10 notebook** (01–09 diễn giải từng bước, 00 để chạy trên Colab) |
+| `tests/` | **14 file test**, chạy bằng `make test` |

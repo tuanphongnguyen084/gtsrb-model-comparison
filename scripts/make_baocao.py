@@ -19,6 +19,8 @@ from __future__ import annotations
 
 import _bootstrap  # noqa: F401
 
+import pathlib
+
 from _common import chi_run_chinh
 
 import argparse
@@ -152,21 +154,44 @@ def ket_luan_robustness() -> str:
     mce = (1 - nhieu.groupby("model")["top1"].mean()).sort_values()
 
     gioi_nhat, ben_nhat, yeu_nhat = sach.idxmax(), mce.idxmin(), sach.idxmin()
-    dong = [f"Trên {len(sach)} mô hình, xét **{len(NHIEU_SO_SANH_DUOC)} loại nhiễu so sánh "
-            f"được** ({', '.join(f'`{n}`' for n in NHIEU_SO_SANH_DUOC)}):"]
+
+    # ★ PHẢI nói rõ đây KHÔNG phải cột mCE của bảng trên.
+    #
+    # LỖI ĐÃ GẶP: cả hai đều được gọi là "error", đặt cách nhau 4 dòng, và cho
+    # THỨ HẠNG KHÁC NHAU. mCE (mọi nhiễu) xếp m3_resnet18 hạng 2 với 0,2817;
+    # chỉ số dưới đây (3 nhiễu so sánh được) xếp nó hạng 3 với 0,4429. Người
+    # đọc so 0,2817 ở bảng với 0,2812 ở văn sẽ tưởng hai mô hình gần bằng nhau.
+    mce_day_du = (1 - frame[frame["corruption"] != "clean"]
+                  .groupby("model")["top1"].mean())
+    thu_hang_khac = list(mce.index) != list(mce_day_du.sort_values().index)
+
+    dong = [f"**Chỉ số dưới đây KHÔNG phải cột `mCE` của bảng trên.** `mCE` tính "
+            f"trên **cả 5 loại nhiễu**, kể cả `motion_blur` và `fog` — hai loại "
+            f"**không so sánh được** giữa 48×48 và 224×224 (xem cảnh báo bên "
+            f"dưới). Chỉ số dưới đây chỉ dùng "
+            f"**{len(NHIEU_SO_SANH_DUOC)} loại so sánh được** "
+            f"({', '.join(f'`{n}`' for n in NHIEU_SO_SANH_DUOC)}), nên con số "
+            f"CAO HƠN và thứ hạng có thể khác."]
+    if thu_hang_khac:
+        a = " < ".join(f"`{m}`" for m in mce_day_du.sort_values().index)
+        dong.append(f"\nVà thứ hạng **đổi thật**: theo `mCE` là {a}; theo "
+                    f"{len(NHIEU_SO_SANH_DUOC)} nhiễu so sánh được thì khác "
+                    f"(xem dòng cuối mục này). Kết luận của nhóm rút từ nhóm "
+                    f"nhiễu so sánh được.")
+    dong.append(f"\nTrên {len(sach)} mô hình:")
 
     if gioi_nhat != ben_nhat:
         dong.append(
             f"\n**Mô hình chính xác nhất trên ảnh sạch KHÔNG phải mô hình bền nhất.** "
             f"`{gioi_nhat}` dẫn đầu khi ảnh sạch (top-1 = {sach[gioi_nhat]:.4f}) "
             f"nhưng `{ben_nhat}` mới là mô hình bền nhất "
-            f"(error trung bình dưới nhiễu = {mce[ben_nhat]:.4f} so với "
+            f"(error trên 3 nhiễu so sánh được = {mce[ben_nhat]:.4f} so với "
             f"{mce[gioi_nhat]:.4f}).")
     else:
         dong.append(
             f"\n**Mô hình chính xác nhất cũng là mô hình bền nhất:** `{gioi_nhat}` "
             f"đứng đầu cả trên ảnh sạch (top-1 = {sach[gioi_nhat]:.4f}) và dưới nhiễu "
-            f"(error trung bình = {mce[gioi_nhat]:.4f}). Trên nhóm mô hình này, độ bền "
+            f"(error trên 3 nhiễu so sánh được = {mce[gioi_nhat]:.4f}). Trên nhóm mô hình này, độ bền "
             f"KHÔNG tách khỏi accuracy — khác với kết quả khi chỉ đo 3 mô hình đầu.")
 
     if yeu_nhat == ben_nhat:
@@ -175,7 +200,7 @@ def ket_luan_robustness() -> str:
             f"(top-1 = {sach[yeu_nhat]:.4f}) — lại bền nhất. Thứ tự xếp hạng khi có "
             f"nhiễu **đảo lại** so với khi không có.")
 
-    dong.append("\nXếp hạng độ bền (error trung bình dưới nhiễu, càng THẤP càng bền): "
+    dong.append("\nXếp hạng độ bền **theo 3 nhiễu so sánh được** (càng THẤP càng bền): "
                 + " < ".join(f"`{m}` {v:.4f}" for m, v in mce.items()) + ".")
     return "\n".join(dong)
 
@@ -239,6 +264,176 @@ def bang_seed_summary() -> str:
         bang.index.name = f"{model} ({len(g)} seed)"
         ra.append(bang.round(5).to_markdown())
     return "\n\n".join(ra)
+
+
+# Biến thể nào TRÙNG với cấu hình mặc định của dự án, theo từng trục.
+# Dùng để nói thẳng: ablation có đồng ý với lựa chọn mặc định hay không.
+MAC_DINH_THEO_TRUC = {
+    "preprocess": "prep_clahe",
+    "augmentation": "aug_geo_photo",
+    "label_smoothing": "ls0.1",
+    "scaling": ("width1.0", "depth4"),
+    "components": "full",
+    "resolution": "res48",
+}
+
+
+def nghich_ly_effnet() -> str:
+    """Câu 'EffNet ít FLOPs hơn ResNet18 x lần nhưng chậm hơn y lần'.
+
+    LỖI ĐÃ GẶP: viết cứng 'chậm hơn 14 lần'. Sau khi đo lại latency trên máy
+    rảnh, số thật là 14,6 lần. Tỉ số tính từ bảng latency thì phải SINH từ bảng
+    đó — mỗi lần đo lại là một lần câu viết cứng nói sai mà không ai biết.
+    """
+    sp = read("speed.csv")
+    if sp is None or "flops_g" not in sp.columns:
+        return "(chưa có số)"
+    sp = sp.set_index("model")
+    try:
+        fl = sp.loc["m3_resnet18", "flops_g"] / sp.loc["m3_effnetb0", "flops_g"]
+        la = sp.loc["m3_effnetb0", "cpu_bs1_p50"] / sp.loc["m3_resnet18", "cpu_bs1_p50"]
+    except KeyError:
+        return "(chưa có số)"
+    return (f"**ít hơn ResNet18 {fl:.1f} lần FLOPs** nhưng chậm hơn "
+            f"**{la:.1f} lần** trên CPU")
+
+
+def phu_luc_tai_lieu() -> str:
+    """Bảng tài liệu kèm theo, ĐẾM TỪ ĐĨA.
+
+    LỖI ĐÃ GẶP: bảng này viết cứng "9 nhóm sự cố" (thật: 13), "20 bảng CSV"
+    (26), "31 hình" (37), và "38 câu hỏi ôn tập" trong PHAN_CONG.md — phần câu
+    hỏi đã bị BỎ theo yêu cầu nhưng dòng mô tả vẫn còn. Một bảng liệt kê sản
+    phẩm mà tự đếm sai thì làm người đọc mất tin vào cả những con số khác.
+    """
+    goc = pathlib.Path(__file__).resolve().parent.parent
+
+    def dem(mau: str) -> int:
+        return len(list(goc.glob(mau)))
+
+    su_co = len([l for l in (goc / "docs/SU_CO.md").read_text(encoding="utf-8")
+                 .splitlines() if l.startswith("## ") and l[3:4].isdigit()]) \
+        if (goc / "docs/SU_CO.md").exists() else 0
+
+    hang = [
+        ("docs/KET_QUA.md", "toàn bộ bảng số, sinh tự động"),
+        ("docs/LY_THUYET.md", "cơ sở lý thuyết, công thức, lý do từng lựa chọn "
+                              "thiết kế; có bản đồ code ↔ lý thuyết"),
+        ("docs/SU_CO.md", f"**{su_co} sự cố** đã gặp thật, kèm nguyên nhân, cách "
+                          f"sửa và test chặn"),
+        ("docs/PHAN_CONG.md", "phân công theo người, kèm khái niệm mỗi người phải nắm"),
+        ("docs/INTERFACE.md", "hợp đồng giữa các phần: chữ ký hàm, schema `result.json`"),
+    ]
+    dong = ["| File | Nội dung |", "|---|---|"]
+    for f, mo_ta in hang:
+        if (goc / f).exists():
+            n = len((goc / f).read_text(encoding="utf-8").splitlines())
+            dong.append(f"| `{f}` | {mo_ta} ({n} dòng) |")
+    dong += [
+        f"| `reports/tables/` | **{dem('reports/tables/*.csv')} bảng CSV** |",
+        f"| `reports/figures/` | **{dem('reports/figures/*.png')} hình** |",
+        f"| `notebooks/` | **{dem('notebooks/*.ipynb')} notebook** "
+        f"(01–09 diễn giải từng bước, 00 để chạy trên Colab) |",
+        f"| `tests/` | **{dem('tests/test_*.py')} file test**, chạy bằng `make test` |",
+    ]
+    return "\n".join(dong)
+
+
+def bang_ablation() -> str:
+    """Bảng ablation theo trục, và nêu thẳng chỗ nó ĐI NGƯỢC cấu hình mặc định.
+
+    Đây là phần dễ bị hỏi nhất khi bảo vệ: nếu ablation nói `he_y` tốt hơn
+    `clahe` mà cả dự án vẫn dùng `clahe`, thì phải giải thích được vì sao —
+    không được để người đọc tự phát hiện.
+    """
+    frame = read("ablation.csv")
+    if frame is None or "tag" not in frame.columns:
+        return MISSING + "  \nChạy `make ablation-budget` rồi `--collect-only`."
+    g = frame[frame["tag"].notna()
+              & frame["tag"].astype(str).str.contains("budget")].copy()
+    if g.empty:
+        return MISSING + "  \nChưa có run ablation nào."
+    g["trục"] = g["tag"].astype(str).str.split("-").str[0]
+    g["biến thể"] = g.apply(
+        lambda r: str(r["tag"]).replace(f"{r['trục']}-", "").replace("-budget", ""),
+        axis=1)
+
+    dong = [f"**{len(g)} run**, mỗi run đổi **đúng một biến** so với cấu hình gốc, "
+            f"ở chế độ ngân sách **15 epoch**. Chế độ này để **xếp hạng** biến "
+            f"thể, không phải để lấy số cuối cùng — cấu hình thắng cần chạy lại "
+            f"ở độ dài đầy đủ trước khi đưa vào bảng so sánh chính.", ""]
+
+    bang = (g[["trục", "biến thể", "model", "test_top1", "test_macro_f1"]]
+            .sort_values(["trục", "test_macro_f1"], ascending=[True, False]))
+    dong += [bang.round(5).to_markdown(index=False), ""]
+
+    # ---- Chỗ ablation KHÔNG đồng ý với mặc định ----
+    # ★ So TRONG CÙNG MỘT MODEL.
+    #
+    # LỖI ĐÃ GẶP: trục `resolution` có nhiều model (m1/m2 ở 32-64px, resnet18 ở
+    # 64-224px). So "tốt nhất = res224" (m3_resnet18) với "mặc định = res48"
+    # (m2_vggres) là so HAI KIẾN TRÚC KHÁC NHAU rồi gọi chênh lệch đó là hiệu
+    # ứng của độ phân giải — đúng lỗi mà nguyên tắc "đổi một biến một lần"
+    # được dựng ra để tránh.
+    nguoc = []
+    for truc, sub in g.groupby("trục"):
+        md = MAC_DINH_THEO_TRUC.get(truc)
+        ten_md = (md,) if isinstance(md, str) else (md or ())
+        hang_md = sub[sub["biến thể"].isin(ten_md)]
+        if hang_md.empty:
+            continue
+        goc = hang_md.loc[hang_md["test_macro_f1"].idxmax()]
+        cung_model = sub[sub["model"] == goc["model"]]
+        tot = cung_model.loc[cung_model["test_macro_f1"].idxmax()]
+        if tot["biến thể"] in ten_md:
+            continue
+        hieu = (tot["test_macro_f1"] - goc["test_macro_f1"]) * 100
+        nguoc.append(
+            f"- **{truc}** (`{goc['model']}`): tốt nhất là `{tot['biến thể']}` "
+            f"({tot['test_macro_f1']:.5f}), cao hơn mặc định "
+            f"`{goc['biến thể']}` ({goc['test_macro_f1']:.5f}) "
+            f"**{hieu:.2f} điểm**.")
+
+    if nguoc:
+        dong += [f"**★ {len(nguoc)}/{g['trục'].nunique()} trục cho kết quả ĐI NGƯỢC "
+                 f"cấu hình mặc định của dự án:**", ""] + nguoc + ["",
+                 "Ba điều phải nói khi trình bày, không được bỏ:", "",
+                 "1. **15 epoch là quá ngắn để augmentation và regularisation trả "
+                 "lãi.** Augmentation, dropout và label smoothing đều làm bài toán "
+                 "huấn luyện KHÓ hơn để đổi lấy khái quát tốt hơn về sau. Ở 15 "
+                 "epoch, phần 'khó hơn' đã tới mà phần 'tốt hơn' chưa tới. Mô hình "
+                 "chính chạy 40 epoch, nên không thể dùng bảng này để kết luận "
+                 "'augmentation vô dụng'.",
+                 "2. **Mỗi ô ở đây là MỘT seed.** Biên độ seed đo được của M2 là "
+                 "**0,50 điểm macro-F1** (mục 3.5.2). Mọi chênh lệch nhỏ hơn con "
+                 "số đó trong bảng trên **không kết luận được gì** — phần lớn các "
+                 "trục có biên độ dưới 1 điểm.",
+                 "3. **Nhóm KHÔNG đổi cấu hình mặc định theo bảng này**, vì (1) và "
+                 "(2). Đây là bước xếp hạng để biết nên chạy lại cái gì ở độ dài "
+                 "đầy đủ, không phải kết luận."]
+    else:
+        dong.append("Trên mọi trục, biến thể tốt nhất **trùng với cấu hình mặc "
+                    "định** của dự án.")
+
+    # Trục nào có biên độ LỚN hơn nhiễu seed thì mới đáng tin
+    dong += ["", "**Trục nào thật sự đáng kết luận?** So biên độ từng trục với "
+             "biên độ seed:", ""]
+    seed = read("seeds.csv")
+    nguong = ((seed["macro_f1"].max() - seed["macro_f1"].min()) * 100
+              if seed is not None and len(seed) > 1 else None)
+    for truc, sub in g.groupby("trục"):
+        bd = (sub["test_macro_f1"].max() - sub["test_macro_f1"].min()) * 100
+        if nguong is None:
+            dong.append(f"- `{truc}`: biên độ {bd:.2f} điểm")
+        else:
+            dau = "**vượt** nhiễu seed" if bd > nguong else "NẰM TRONG nhiễu seed"
+            dong.append(f"- `{truc}`: biên độ {bd:.2f} điểm — {dau} "
+                        f"({nguong:.2f} điểm)")
+    if nguong is not None:
+        dong.append(f"\nChỉ những trục **vượt {nguong:.2f} điểm** mới đáng rút kết "
+                    f"luận từ một seed. Các trục còn lại cần nhiều seed mới nói "
+                    f"được gì.")
+    return "\n".join(dong)
 
 
 def ket_luan_seed() -> str:
@@ -570,7 +765,7 @@ Xoay ±15°, dịch ±10%, zoom 0,9–1,1, jitter độ sáng/tương phản ±0
 **Một quan sát đáng chú ý về số tham số:** M1 có **2.424.299** tham số với **2** lớp conv,
 trong đó **97,3%** nằm ở *một* lớp `Flatten(9216) → FC(256)`. M2 có **9** lớp conv nhưng
 chỉ **1.237.451** tham số — **ít hơn M1** — vì nó thay Flatten+FC bằng Global Average
-Pooling (11.051 tham số, giảm ~213 lần ở phần head). Bài học: **số lớp không tỉ lệ với số
+Pooling (11.051 tham số, giảm **214 lần** ở phần head). Bài học: **số lớp không tỉ lệ với số
 tham số; chỗ đắt là lớp fully-connected.**
 
 M3 dùng mean/std của **ImageNet** (không phải của GTSRB) vì trọng số pretrained và
@@ -693,7 +888,7 @@ chạy bất đồng bộ — không đồng bộ thì đang đo thời gian *g�
 {table_efficiency()}
 
 Nếu latency tỉ lệ FLOPs thì cột cuối phải bằng nhau — thực tế chênh **{ms_tren_gflop()}**.
-EfficientNet-B0 có **ít hơn ResNet18 4,4 lần FLOPs** nhưng chậm hơn **14 lần** trên CPU.
+EfficientNet-B0 {nghich_ly_effnet()}.
 Nguyên nhân: MBConv + squeeze-excitation gồm rất nhiều lớp **mảnh**, mỗi lớp tốn chi phí
 cố định (launch kernel, truy cập bộ nhớ) mà làm rất ít phép tính → bị chặn bởi **băng
 thông bộ nhớ**, không bởi năng lực tính toán.
@@ -702,7 +897,11 @@ thông bộ nhớ**, không bởi năng lực tính toán.
 nhất trong cả {f['n_models']}.** Muốn nói về triển khai thì phải đo wall-clock trên thiết
 bị đích.
 
-### 3.7 Grad-CAM
+### 3.7 Ablation — đổi một biến một lần
+
+{bang_ablation()}
+
+### 3.8 Grad-CAM
 
 Bản đồ nhiệt sinh theo công thức Selvaraju (2017), hook vào khối conv cuối. Ba nhóm hình
 cho mỗi mô hình: dự đoán đúng, **dự đoán sai**, và cùng một ảnh trước/sau khi thêm nhiễu.
@@ -742,9 +941,13 @@ nghĩa thống kê* là lựa chọn tồi trên hệ thống thời gian thực
    của bước đó sẽ cộng dồn vào.
 2. **Phân phối test giống phân phối train** — cùng chụp ở Đức, cùng loại camera. Chưa kiểm
    được khả năng khái quát sang biển báo nước khác.
-3. **Mức độ nhiễu không so sánh được giữa các độ phân giải** đối với motion blur (mục 3.5).
-4. **So sánh M2 với M3 lẫn hai biến** (pretrained hay không, và 48 hay 224 px). Ablation
-   độ phân giải là bước cần thiết để tách chúng — đã chuẩn bị nhưng chưa chạy.
+3. **Phép đo robustness có hai giới hạn đã lượng hoá:** mức độ nhiễu không so sánh được
+   giữa các độ phân giải đối với motion blur (mục 3.5), và nhiễu được áp **sau** bước
+   CLAHE nên thiên vị theo mô hình (mục 3.5.1) — giới hạn thứ hai nặng hơn, và đã được
+   đo bằng thực nghiệm đối chứng chứ không chỉ nêu ra.
+4. **So sánh M2 với M3 lẫn hai biến** (pretrained hay không, và 48 hay 224 px). Trục
+   ablation `resolution` đã chạy đủ 9 run để tách chúng (mục 3.7), nhưng ở chế độ
+   ngân sách 15 epoch — xếp hạng được biến thể, chưa phải số cuối cùng.
 5. **Chỉ M2 được chạy nhiều seed** (3 seed); bốn mô hình còn lại một seed. Biên độ seed đo
    được của M2 dùng làm thước đo nhiễu cho cả bảng, nhưng đó là phép ngoại suy.
 6. **Chưa kiểm adversarial robustness** (FGSM/PGD) — khác bản chất với nhiễu tự nhiên.
@@ -797,15 +1000,7 @@ Mỗi file mã nguồn ghi rõ `CHỦ: <tên>` ở đầu docstring.
 
 ## Phụ lục C — Tài liệu kèm theo
 
-| File | Nội dung |
-|---|---|
-| `docs/KET_QUA.md` | toàn bộ bảng số, sinh tự động |
-| `docs/LY_THUYET.md` | cơ sở lý thuyết, công thức, lý do từng lựa chọn thiết kế |
-| `docs/SU_CO.md` | 9 nhóm sự cố đã gặp trong quá trình làm, kèm nguyên nhân và cách sửa |
-| `docs/PHAN_CONG.md` | phân công chi tiết + 38 câu hỏi ôn tập |
-| `reports/tables/` | 20 bảng CSV |
-| `reports/figures/` | 31 hình |
-| `notebooks/` | 10 notebook có diễn giải |
+{phu_luc_tai_lieu()}
 """
 
 

@@ -204,19 +204,34 @@ Sai schema = run đó bị bỏ khỏi báo cáo.
   "train": {"epochs_run": 42, "best_epoch": 35, "label_smoothing": 0.1,
             "optimizer": "adam", "lr": 0.001, "scheduler": "cosine_warmup3",
             "batch_size": 128, "train_seconds": 1523.4, "device": "cuda:T4"},
-  "val":  {"top1": 0.9941, "top5": 0.9998, "macro_f1": 0.9917},
+  "val":  {"top1": 0.9941, "best_macro_f1": 0.9917},
   "test": {"top1": 0.9936, "top5": 0.9999, "macro_f1": 0.9905,
+           "weighted_f1": 0.9936, "ece": 0.0535,
            "per_class_f1": [0.99, 0.99, "... đủ 43 số ..."]},
-  "cost": {"params_m": 4.51, "flops_g": 0.42, "size_mb": 17.2,
-           "latency_ms": {"cpu_bs1_p50": 8.1,  "cpu_bs1_p95": 11.4,
-                          "gpu_bs1_p50": 1.9,  "gpu_bs1_p95": 2.6,
-                          "gpu_bs64_p50": 21.0}},
+  "cost": {"img_size": 48, "params_m": 4.51, "flops_g": 0.42, "size_mb": 17.2,
+           "cpu_bs1_p50": 8.1, "cpu_bs1_p95": 11.4, "cpu_bs1_mean": 8.4,
+           "cpu_bs1_imgs_per_sec": 123.5,
+           "cpu_bs64_p50": 21.0, "mps_bs1_p50": 1.9, "mps_bs64_p50": 9.2,
+           "environment": {"torch": "2.x", "device": "mps"}},
   "ckpt_path": "artifacts/runs/m2_vggres_s42_20260310_1432/best.pt",
   "notes": "ablation: width x1, depth 4 stage"
 }
 ```
 
-Khoá nào chưa chạy thì để `null`, **không bỏ khoá**. `tests/test_schema.py` kiểm việc này.
+Khoá nào chưa chạy thì để `null`, **không bỏ khoá**. `tests/test_schema.py` kiểm
+việc này trên MỌI `result.json` có trong `artifacts/runs/`.
+
+**Hai chỗ dễ viết sai, đã từng viết sai trong chính tài liệu này:**
+
+| Sai | Đúng | Vì sao |
+|---|---|---|
+| `val.macro_f1`, `val.top5` | **`val.best_macro_f1`** | `val` chỉ ghi `top1` và `best_macro_f1` (giá trị TỐT NHẤT qua các epoch, do early stopping theo nó). Không script nào đọc `val.macro_f1`. |
+| `cost.latency_ms.cpu_bs1_p50` | **`cost.cpu_bs1_p50`** | latency nằm ở khoá **phẳng**, không lồng. `benchmark()` trả dict phẳng dạng `{device}_bs{N}_{p50\|p95\|mean\|imgs_per_sec}`. |
+
+Hai lỗi này tồn tại trong tài liệu suốt dự án mà không ai phát hiện, vì
+`tests/test_schema.py` được HỨA trong mục này nhưng chưa bao giờ được viết. Soát
+lại 39 run thật thì `val.top5` và `val.macro_f1` thiếu ở **39/39 run** —
+nghĩa là tài liệu sai, không phải code sai.
 
 ---
 
