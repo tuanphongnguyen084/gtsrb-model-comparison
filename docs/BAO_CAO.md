@@ -1,6 +1,6 @@
 # Phân loại biển báo giao thông GTSRB: so sánh ba hướng tiếp cận Deep Learning
 
-**Môn**: Deep Learning · **Ngày**: 04/10/2026
+**Môn**: Deep Learning · **Ngày**: 05/10/2026
 **Nhóm**: Phong Nguyễn · Hoàng · Phong Trần · Huy
 
 > Bảng số trong báo cáo này được **sinh tự động** từ `reports/tables/` bằng
@@ -11,7 +11,7 @@
 
 ## Tóm tắt
 
-Nhóm xây và so sánh 1 mô hình phân loại 43 lớp biển báo giao thông Đức trên
+Nhóm xây và so sánh 5 mô hình phân loại 43 lớp biển báo giao thông Đức trên
 bộ GTSRB (39.209 ảnh train + 12.630 ảnh test chính thức), theo ba hướng: CNN đơn giản tự
 xây (LeNet), CNN sâu tự xây (VGG-like có BatchNorm, residual, spatial dropout, Global
 Average Pooling), và transfer learning từ ba backbone pretrained ImageNet.
@@ -26,10 +26,10 @@ thì nên chọn mô hình nào.
 **Ba kết quả chính, đều đi ngược kỳ vọng thông thường:**
 
 1. Mô hình **tự xây 1,24 M tham số đánh bại hai backbone pretrained ImageNet** với ý nghĩa
-   thống kê (p < 1e-6), trong khi nhanh hơn 13–68 lần.
+   thống kê (p < 1e-6), trong khi nhanh hơn 15–76 lần.
 2. **Latency không tỉ lệ với FLOPs**, chênh tới **64 lần** về hiệu quả trên mỗi GFLOP.
-   Mô hình tên "EfficientNet" lại là mô hình **chậm nhất** trong cả 1.
-3. Mô hình có **accuracy sạch cao nhất lại kém bền nhất** trước nhiễu thực tế.
+   Mô hình tên "EfficientNet" lại là mô hình **chậm nhất** trong cả 5.
+3. Mô hình có **accuracy sạch cao nhất lại kém bền nhất** trước nhiễu, còn `m1_lenet` — yếu nhất khi ảnh sạch — bền nhất trước nhiễu thực tế.
 
 ---
 
@@ -128,7 +128,7 @@ sau 3 epoch, rồi **nhảy lên 96,4% chỉ trong một epoch** ngay khi mở b
 Cross-entropy + **label smoothing 0,1**; Adam/AdamW; warmup tuyến tính 3 epoch rồi
 **cosine annealing**; gradient clipping 1,0; mixed precision (tự bật trên CUDA, tắt trên
 MPS); **early stopping theo val macro-F1** (không theo accuracy, vì dữ liệu mất cân bằng
-10,7:1 khiến accuracy bị các lớp đông chi phối). Cả 1 mô hình dùng **chung
+10,7:1 khiến accuracy bị các lớp đông chi phối). Cả 5 mô hình dùng **chung
 một hàm `fit()`** để so sánh được công bằng.
 
 ---
@@ -137,9 +137,13 @@ một hàm `fit()`** để so sánh được công bằng.
 
 ### 3.1 Bảng so sánh chính (tập test chính thức, 12.630 ảnh)
 
-| Mô hình   |   Tham số (M) |   FLOPs (G) |   Dung lượng (MB) | Top-1   | Top-5   |   Macro-F1 |   ECE |   p95 CPU (ms) |   Train (phút) |
-|:----------|--------------:|------------:|------------------:|:--------|:--------|-----------:|------:|---------------:|---------------:|
-| m1_lenet  |          2.42 |        0.07 |               9.7 | 98.46%  | 99.85%  |     0.9778 | 0.131 |            1.1 |             12 |
+| Mô hình        |   Tham số (M) |   FLOPs (G) |   Dung lượng (MB) | Top-1   | Top-5   |   Macro-F1 |    ECE |   p95 CPU (ms) |   Train (phút) |
+|:---------------|--------------:|------------:|------------------:|:--------|:--------|-----------:|-------:|---------------:|---------------:|
+| m3_resnet18    |         11.2  |        3.65 |              44.8 | 99.33%  | 99.94%  |     0.9903 | 0.1085 |           18.3 |             61 |
+| m2_vggres      |          1.24 |        0.29 |               5   | 99.26%  | 99.94%  |     0.988  | 0.0535 |            3.7 |             24 |
+| m3_effnetb0    |          4.06 |        0.83 |              16.2 | 98.77%  | 99.91%  |     0.9838 | 0.0973 |          256.6 |            132 |
+| m3_mobilenetv2 |          2.28 |        0.65 |               9.1 | 98.73%  | 99.96%  |     0.9796 | 0.1076 |           49   |             55 |
+| m1_lenet       |          2.42 |        0.07 |               9.7 | 98.46%  | 99.85%  |     0.9778 | 0.131  |            1.1 |             12 |
 
 **Lưu ý khi đọc:** cột **Top-5 gần như vô nghĩa** ở bài này. Top-5 ra đời cho ImageNet
 1000 lớp; trên 43 lớp nó nghĩa là "đúng trong 11,6% số lớp" nên mọi mô hình tử tế đều
@@ -178,29 +182,29 @@ nguồn về độ phân giải** — GTSRB không thoả cả hai điều kiệ
 
 ### 3.3 Phân tích theo lớp
 
-**Mô hình `m1_lenet`:**
+**Mô hình `m3_resnet18`:**
 
 |   Lớp | Tên                            |    F1 |   Số ảnh test |
 |------:|:-------------------------------|------:|--------------:|
-|    27 | Người đi bộ                    | 0.904 |            60 |
-|     6 | Hết giới hạn 80 km/h           | 0.905 |           150 |
-|    42 | Hết cấm vượt (xe trên 3,5 tấn) | 0.911 |            90 |
-|    30 | Cẩn thận băng/tuyết            | 0.93  |           150 |
-|    41 | Hết cấm vượt                   | 0.942 |            60 |
-|    22 | Đường xấu                      | 0.947 |           120 |
-|    26 | Đèn tín hiệu                   | 0.951 |           180 |
-|    40 | Vòng xuyến bắt buộc            | 0.951 |            90 |
+|    27 | Người đi bộ                    | 0.729 |            60 |
+|    41 | Hết cấm vượt                   | 0.923 |            60 |
+|    23 | Đường trơn                     | 0.928 |           150 |
+|     6 | Hết giới hạn 80 km/h           | 0.94  |           150 |
+|    22 | Đường xấu                      | 0.943 |           120 |
+|    42 | Hết cấm vượt (xe trên 3,5 tấn) | 0.956 |            90 |
+|     5 | Giới hạn 80 km/h               | 0.967 |           630 |
+|    20 | Đường cong nguy hiểm sang phải | 0.967 |            90 |
 
 Các cặp bị nhầm nhiều nhất:
 
-|   Lớp thật | Tên                       |   Đoán thành | Tên                            |   Số lần |
-|-----------:|:--------------------------|-------------:|:-------------------------------|---------:|
-|         17 | Cấm đi vào                |            9 | Cấm vượt                       |       16 |
-|          6 | Hết giới hạn 80 km/h      |           42 | Hết cấm vượt (xe trên 3,5 tấn) |       14 |
-|          3 | Giới hạn 60 km/h          |            5 | Giới hạn 80 km/h               |       14 |
-|          8 | Giới hạn 120 km/h         |            5 | Giới hạn 80 km/h               |       11 |
-|         22 | Đường xấu                 |           25 | Đang thi công                  |       10 |
-|         11 | Ưu tiên ở giao lộ kế tiếp |           30 | Cẩn thận băng/tuyết            |       10 |
+|   Lớp thật | Tên                       |   Đoán thành | Tên                       |   Số lần |
+|-----------:|:--------------------------|-------------:|:--------------------------|---------:|
+|          3 | Giới hạn 60 km/h          |            5 | Giới hạn 80 km/h          |       17 |
+|          6 | Hết giới hạn 80 km/h      |            5 | Giới hạn 80 km/h          |        8 |
+|         27 | Người đi bộ               |           11 | Ưu tiên ở giao lộ kế tiếp |        7 |
+|         27 | Người đi bộ               |           23 | Đường trơn                |        7 |
+|         11 | Ưu tiên ở giao lộ kế tiếp |           23 | Đường trơn                |        6 |
+|          6 | Hết giới hạn 80 km/h      |           41 | Hết cấm vượt              |        5 |
 
 Hai nguyên nhân cần tách bạch: F1 thấp kèm **support cao** là do **hình giống nhau**
 (vấn đề độ phân giải — các biển giới hạn tốc độ chỉ khác chữ số, mà ở 48×48 chữ số chỉ còn
@@ -227,14 +231,21 @@ nghĩa vì robustness nghĩa là khái quát sang phân phối **chưa từng th
 
 Bảng `relative robustness` = accuracy dưới nhiễu / accuracy trên ảnh sạch:
 
-| model       |    fog |   gauss_noise |   low_light |   motion_blur |   occlusion |    mCE |   clean_top1 |
-|:------------|-------:|--------------:|------------:|--------------:|------------:|-------:|-------------:|
-| m1_lenet    | 0.7254 |        0.9099 |      0.7795 |        0.8494 |      0.5009 | 0.2586 |       0.9846 |
-| m2_vggres   | 0.7658 |        0.8801 |      0.6486 |        0.8248 |      0.4697 | 0.2875 |       0.9926 |
-| m3_resnet18 | 0.9336 |        0.684  |      0.5576 |        0.9995 |      0.4408 | 0.2817 |       0.9933 |
+| model          |    fog |   gauss_noise |   low_light |   motion_blur |   occlusion |    mCE |   clean_top1 |
+|:---------------|-------:|--------------:|------------:|--------------:|------------:|-------:|-------------:|
+| m1_lenet       | 0.7254 |        0.9099 |      0.7795 |        0.8494 |      0.5009 | 0.2586 |       0.9846 |
+| m2_vggres      | 0.7658 |        0.8801 |      0.6486 |        0.8248 |      0.4697 | 0.2875 |       0.9926 |
+| m3_effnetb0    | 0.6945 |        0.1104 |      0.0094 |        0.9969 |      0.5264 | 0.5383 |       0.9876 |
+| m3_mobilenetv2 | 0.7045 |        0.2408 |      0.0881 |        0.9973 |      0.3874 | 0.5225 |       0.9873 |
+| m3_resnet18    | 0.9336 |        0.684  |      0.5576 |        0.9995 |      0.4408 | 0.2817 |       0.9933 |
 
-**Kết quả chính: mô hình có accuracy sạch cao nhất lại KHÔNG phải mô hình bền nhất.**
-M1 — yếu nhất về accuracy — có mCE tốt nhất.
+Trên 5 mô hình, xét **3 loại nhiễu so sánh được** (`gauss_noise`, `low_light`, `occlusion`):
+
+**Mô hình chính xác nhất trên ảnh sạch KHÔNG phải mô hình bền nhất.** `m3_resnet18` dẫn đầu khi ảnh sạch (top-1 = 0.9933) nhưng `m1_lenet` mới là mô hình bền nhất (error trung bình dưới nhiễu = 0.2812 so với 0.4429).
+
+Đáng chú ý hơn: `m1_lenet` — **yếu nhất** trên ảnh sạch (top-1 = 0.9846) — lại bền nhất. Thứ tự xếp hạng khi có nhiễu **đảo lại** so với khi không có.
+
+Xếp hạng độ bền (error trung bình dưới nhiễu, càng THẤP càng bền): `m1_lenet` 0.2812 < `m2_vggres` 0.3388 < `m3_resnet18` 0.4429 < `m3_mobilenetv2` 0.7643 < `m3_effnetb0` 0.7873.
 
 ⚠️ **Giới hạn phương pháp cần nêu rõ:** nhiễu được áp **sau khi** resize, mà M1/M2 chạy ở
 48×48 còn M3 ở 224×224. Kernel motion blur mức 5 là **15 pixel tuyệt đối**: ở 48×48 nó phủ
@@ -242,6 +253,61 @@ M1 — yếu nhất về accuracy — có mCE tốt nhất.
 được** giữa hai nhóm độ phân giải. Ba cột `gauss_noise`, `low_light`, `occlusion` thì so
 sánh được (phép toán theo từng pixel hoặc theo % diện tích), và kết luận chỉ rút từ chúng.
 Hướng sửa triệt để: đổi kernel sang tỉ lệ % chiều rộng ảnh.
+
+#### 3.5.1 Giới hạn NẶNG hơn: nhiễu được áp SAU bước CLAHE
+
+**Chênh = (áp nhiễu TRƯỚC CLAHE) − (áp nhiễu SAU CLAHE).** Dương nghĩa là sửa thứ tự giúp mô hình đó:
+
+| model          |   gauss_noise |   low_light |   trung bình |
+|:---------------|--------------:|------------:|-------------:|
+| m3_effnetb0    |         0.368 |       0.361 |        0.364 |
+| m3_mobilenetv2 |         0.332 |       0.265 |        0.298 |
+| m3_resnet18    |         0.003 |       0.006 |        0.005 |
+| m2_vggres      |        -0.111 |      -0.078 |       -0.095 |
+| m1_lenet       |        -0.155 |      -0.198 |       -0.176 |
+
+**Dấu của hiệu ứng phụ thuộc vào MÔ HÌNH** — không phải một sai số chung cộng vào mọi mô hình như nhau. CLAHE cân bằng tương phản **cục bộ**: áp nhiễu trước thì CLAHE *khuếch đại* chính cái nhiễu đó, rồi ảnh bị thu về 48×48. Với mô hình nhỏ ở độ phân giải thấp, nhiễu đã khuếch đại còn tệ hơn ảnh tối ban đầu; với mô hình 224px thì việc lấy lại độ sáng tổng thể quan trọng hơn.
+
+Thứ hạng độ bền theo hai thứ tự:
+
+| | thứ tự ĐANG đo | thứ tự TRIỂN KHAI |
+|---|---|---|
+| 1 | `m1_lenet` 0.798 | `m1_lenet` 0.622 |
+| 2 | `m2_vggres` 0.705 | `m2_vggres` 0.611 |
+| 3 | `m3_resnet18` 0.528 | `m3_resnet18` 0.532 |
+| 4 | `m3_mobilenetv2` 0.133 | `m3_effnetb0` 0.456 |
+| 5 | `m3_effnetb0` 0.091 | `m3_mobilenetv2` 0.431 |
+
+**Ba điều phải nói cùng nhau, không được lẫn:**
+
+1. Mô hình bền nhất **không đổi** (`m1_lenet`) ở cả hai thứ tự — kết luận chính vẫn đứng.
+2. Nhưng khoảng cách hạng 1 với hạng 2 **co từ 0.093 xuống 0.011** — hai mô hình đầu gần như bằng nhau về độ bền. Nói 'm1_lenet bền nhất' mà không nói con số này là phóng đại.
+3. Biên độ giữa 5 mô hình co từ **0.71 xuống 0.19**. Những con số thấp dưới mức đoán bừa (1/43 = 0,023) trong bảng robustness chính là **hiện vật đo**, không phải tính chất mô hình.
+
+**Không có thứ tự nào đúng tuyệt đối.** Áp sau CLAHE thiên vị mô hình nhỏ ở 48px; áp trước CLAHE sát điều kiện triển khai hơn nhưng trừng phạt chính nhóm đó. Phép đo chính trong `robustness.csv` dùng thứ tự **sau CLAHE**; bảng trên là phép đo đối chứng. Chi tiết ở `docs/SU_CO.md` §12.
+
+### 3.5.2 Nhiễu seed — chênh lệch bao nhiêu điểm thì mới là THẬT?
+
+Cùng một cấu hình, chỉ đổi seed khởi tạo. Đây là phép đo **độc lập** với McNemar
+cho cùng một câu hỏi, và quan trọng hơn mọi con số accuracy lẻ trong báo cáo: nó
+cho biết **ngưỡng dưới** của những gì đáng kết luận.
+
+**Macro-F1 nhiễu hơn top-1 5 lần** qua các seed của `m2_vggres`: biên độ 0.50 điểm so với 0.10 điểm. Hợp lý — macro-F1 cho mỗi lớp trọng số bằng nhau, nên nó chịu trọn dao động ở các lớp thiểu số, đúng chỗ nhạy nhất với seed. Đó là **cái giá** của việc chọn macro-F1 làm chỉ số chính, và nghĩa là ngưỡng 'đáng kể' của macro-F1 phải ĐẶT CAO HƠN ngưỡng của top-1, không dùng chung một mức.
+
+`m2_vggres` chạy **3 seed** (42, 43, 44): macro-F1 0.99054 ± 0.00250, từ 0.98798 đến 0.99297 — **biên độ 0.50 điểm**.
+
+
+Trong bảng so sánh chính, `m3_resnet18` (0.99030) nằm **bên trong** biên độ seed của `m2_vggres`. Nghĩa là chênh lệch với những mô hình đó **không phân biệt được khỏi việc đổi seed**.
+
+
+★ Seed tốt nhất của `m2_vggres` (0.99297) **vượt** `m3_resnet18` (0.99030) — mô hình xếp TRÊN nó trong bảng chính. Thứ hạng giữa chúng **đảo theo seed**, nên không được trình bày như một xếp hạng cố định. Đây là phép đo ĐỘC LẬP dẫn tới cùng kết luận với McNemar.
+
+| m2_vggres (3 seed)   |    mean |     std |     min |     max |   biên độ (điểm) |
+|:---------------------|--------:|--------:|--------:|--------:|-----------------:|
+| top1                 | 0.99293 | 0.00051 | 0.99256 | 0.99351 |           0.0951 |
+| top5                 | 0.99926 | 0.00018 | 0.99905 | 0.99937 |           0.0317 |
+| macro_f1             | 0.99054 | 0.0025  | 0.98798 | 0.99297 |           0.4992 |
+| ece                  | 0.05608 | 0.00231 | 0.05347 | 0.05788 |           0.4403 |
 
 ### 3.6 Tốc độ suy luận và triển khai biên
 
@@ -266,7 +332,7 @@ cố định (launch kernel, truy cập bộ nhớ) mà làm rất ít phép tí
 thông bộ nhớ**, không bởi năng lực tính toán.
 
 **Hệ quả thực hành: chọn mô hình theo FLOPs sẽ dẫn tới EfficientNet-B0 — mô hình chậm
-nhất trong cả 1.** Muốn nói về triển khai thì phải đo wall-clock trên thiết
+nhất trong cả 5.** Muốn nói về triển khai thì phải đo wall-clock trên thiết
 bị đích.
 
 ### 3.7 Grad-CAM
@@ -293,12 +359,12 @@ Quyết định dựa trên **ba trục**, không chỉ accuracy:
 2. **Latency p95** ở batch = 1 (tình huống xe xử lý từng khung ảnh).
 3. **Relative robustness** dưới nhiễu — điều kiện vận hành thật.
 
-Mô hình macro-F1 cao nhất là `m1_lenet` (0.9778). Nhưng trong nhóm **tương đương
-thống kê** với nó, mô hình nhanh nhất là **`m1_lenet`** — nhanh hơn **1.0
-lần** ở p95. Trả thêm 1.0 lần latency để lấy chênh lệch accuracy *không có ý
+Mô hình macro-F1 cao nhất là `m3_resnet18` (0.9903). Nhưng trong nhóm **tương đương
+thống kê** với nó, mô hình nhanh nhất là **`m2_vggres`** — nhanh hơn **4.9
+lần** ở p95. Trả thêm 4.9 lần latency để lấy chênh lệch accuracy *không có ý
 nghĩa thống kê* là lựa chọn tồi trên hệ thống thời gian thực.
 
-→ **Khuyến nghị: `m1_lenet`.** Chi tiết suy luận ba bước: `docs/KET_QUA.md` mục 9.
+→ **Khuyến nghị: `m2_vggres`.** Chi tiết suy luận ba bước: `docs/KET_QUA.md` mục 9.
 
 ---
 
@@ -312,7 +378,8 @@ nghĩa thống kê* là lựa chọn tồi trên hệ thống thời gian thực
 3. **Mức độ nhiễu không so sánh được giữa các độ phân giải** đối với motion blur (mục 3.5).
 4. **So sánh M2 với M3 lẫn hai biến** (pretrained hay không, và 48 hay 224 px). Ablation
    độ phân giải là bước cần thiết để tách chúng — đã chuẩn bị nhưng chưa chạy.
-5. **Mỗi cấu hình chỉ chạy một seed.** Chênh lệch nhỏ hơn độ nhiễu seed không nên kết luận.
+5. **Chỉ M2 được chạy nhiều seed** (3 seed); bốn mô hình còn lại một seed. Biên độ seed đo
+   được của M2 dùng làm thước đo nhiễu cho cả bảng, nhưng đó là phép ngoại suy.
 6. **Chưa kiểm adversarial robustness** (FGSM/PGD) — khác bản chất với nhiễu tự nhiên.
 
 ---
@@ -323,12 +390,12 @@ Trên một bộ dữ liệu đã bão hoà, việc đua accuracy không còn l�
 của báo cáo này nằm ở ba kết luận chỉ rút ra được khi **đo cẩn thận và kiểm định**:
 
 1. Một CNN **tự xây 1,24 M tham số** vượt hai backbone pretrained ImageNet có ý nghĩa thống
-   kê, trong khi nhanh hơn 13–68 lần — vì miền đích có độ phân giải quá thấp để lợi thế
+   kê, trong khi nhanh hơn 15–76 lần — vì miền đích có độ phân giải quá thấp để lợi thế
    pretrained phát huy.
 2. **Latency chênh 64 lần so với dự đoán từ FLOPs.** Chọn mô hình theo FLOPs sẽ chọn đúng
    mô hình chậm nhất.
-3. **Mô hình chính xác nhất không phải mô hình bền nhất**, và cũng không phải mô hình nên
-   triển khai.
+3. Mô hình có **accuracy sạch cao nhất lại kém bền nhất** trước nhiễu, còn `m1_lenet` — yếu nhất khi ảnh sạch — bền nhất — và mô hình chính xác nhất cũng không phải mô hình
+   nên triển khai.
 
 Điểm chung của cả ba: chúng chỉ lộ ra khi **không tin vào con số đầu tiên nhìn thấy**.
 

@@ -144,14 +144,17 @@ def main() -> None:
     device = torch.device(args.device or
                           ("mps" if torch.backends.mps.is_available() else "cpu"))
     idx = pd.read_csv("data/processed/index.csv")
-    # Lấy mẫu RẢI ĐỀU theo lớp, không lấy 512 ảnh đầu (index.csv sắp theo lớp,
-    # 512 ảnh đầu chỉ có vài lớp -> macro-F1 và accuracy đều lệch).
+    # Lấy mẫu RẢI ĐỀU theo lớp. KHÔNG lấy n ảnh đầu: index.csv sắp theo lớp nên
+    # n ảnh đầu chỉ gồm vài lớp, accuracy đo được sẽ không so được với số của
+    # toàn tập test — và cổng tự kiểm bên dưới sẽ báo lệch vì lý do sai.
+    moi_lop = max(1, args.n // 43)
     test = (idx[idx.split == "test"]
-            .groupby("class_id", group_keys=False)
-            .apply(lambda g: g.head(max(1, args.n // 43)), include_groups=False)
+            .sort_values(["class_id", "path"])
+            .groupby("class_id", as_index=False, group_keys=False)
+            .head(moi_lop)
             .reset_index(drop=True))
-    test["path"] = idx.loc[test.index, "path"].values if "path" not in test else test["path"]
-    log.info("Lấy %d ảnh test, %d lớp", len(test), test.class_id.nunique())
+    log.info("Lấy %d ảnh test (%d ảnh mỗi lớp), %d lớp",
+             len(test), moi_lop, test["class_id"].nunique())
 
     sach_biet = (pd.read_csv("reports/tables/robustness.csv")
                  .query("corruption == 'clean'").set_index("model")["top1"].to_dict())

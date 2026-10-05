@@ -288,7 +288,91 @@ viết test chặn lỗi, phải **tái tạo lại lỗi** để xem test có b
 
 ---
 
-## 12. Các lỗi KHÁC NÊN BIẾT TRƯỚC (chưa gặp nhưng gần như chắc chắn sẽ gặp)
+## 12. ★★ Nhiễu áp SAU CLAHE — phép đo robustness thiên vị theo model
+
+**Triệu chứng.** Hai con số không thể tin được trong bảng robustness:
+
+| model | `low_light` relative_top1 |
+|---|---|
+| m3_effnetb0 | **0,009** |
+| m3_mobilenetv2 | 0,088 |
+| m1_lenet | 0,779 |
+
+Đoán bừa trên 43 lớp cho 1/43 = 0,023. EfficientNet-B0 sụp xuống **dưới mức
+đoán bừa**, ngay từ mức 1 (gamma 1,5 — chỉ hơi tối), rồi phẳng tịt 0,0094–0,0100
+qua cả 5 mức. Đường robustness thật thì giảm dần.
+
+**Nguyên nhân.** Đường ống áp nhiễu **SAU** CLAHE:
+
+```
+ảnh gốc -> cắt ROI -> CLAHE -> resize 48 -> nội suy 224 -> LÀM TỐI -> model
+```
+
+Khi triển khai thật thì thứ tự **ngược lại** — ảnh vào camera đã tối rồi, CLAHE
+mới chạy và **bù lại** độ tối. Áp nhiễu sau CLAHE nghĩa là bước bù sáng diễn ra
+*trước* bước làm tối, nên nó không bù được gì.
+
+**★ Đo thật, và kết quả KHÔNG như tôi đoán ★**
+
+`scripts/kiem_thu_tu_clahe.py`, 430 ảnh (10 ảnh/lớp × 43 lớp), 2 loại nhiễu so
+sánh được × 3 mức. Chênh = (trước CLAHE − sau CLAHE), dương nghĩa là sửa thứ tự
+giúp model:
+
+| model | gauss_noise | low_light | trung bình |
+|---|---|---|---|
+| m3_effnetb0 | +0,368 | +0,361 | **+0,364** |
+| m3_mobilenetv2 | +0,332 | +0,265 | **+0,298** |
+| m3_resnet18 | +0,003 | +0,006 | +0,005 |
+| m2_vggres | −0,111 | −0,078 | **−0,095** |
+| m1_lenet | −0,155 | −0,198 | **−0,176** |
+
+**Dấu của hiệu ứng PHỤ THUỘC VÀO MODEL.** Tôi đã đoán sửa thứ tự sẽ giúp mọi
+model. Thực tế nó giúp hai backbone ImageNet rất nhiều, trung tính với
+ResNet18, và **làm M1/M2 KÉM ĐI**.
+
+Vì sao M1/M2 kém đi: CLAHE là cân bằng tương phản **cục bộ**. Áp nhiễu trước thì
+CLAHE **khuếch đại** chính cái nhiễu đó, rồi ảnh bị thu về 48×48. Với mô hình
+nhỏ ở độ phân giải thấp, nhiễu đã bị khuếch đại còn tệ hơn ảnh tối ban đầu. Còn
+với mô hình 224px thì việc CLAHE lấy lại độ sáng tổng thể quan trọng hơn.
+
+**Thứ hạng độ bền đổi thế nào:**
+
+| | thứ tự ĐANG đo | thứ tự TRIỂN KHAI |
+|---|---|---|
+| 1 | m1_lenet **0,798** | m1_lenet **0,622** |
+| 2 | m2_vggres 0,705 | m2_vggres **0,611** |
+| 3 | m3_resnet18 0,528 | m3_resnet18 0,532 |
+| 4 | m3_mobilenetv2 0,133 | m3_effnetb0 0,456 |
+| 5 | m3_effnetb0 0,091 | m3_mobilenetv2 0,431 |
+
+**Kết luận cho báo cáo — ba điều, không được lẫn:**
+
+1. Kết luận "M1 bền nhất dù accuracy sạch kém nhất" **vẫn đứng** ở cả hai thứ tự.
+2. Nhưng **khoảng cách M1 với M2 co từ 0,093 xuống 0,011** — tức hai mô hình
+   gần như BẰNG NHAU về độ bền. Nói "M1 bền nhất" mà không nói con số này là
+   phóng đại.
+3. Hai con số 0,009 và 0,088 là **hiện vật đo**, không phải tính chất mô hình.
+   Thực tế là 0,456 và 0,431. Biên độ giữa 5 mô hình co từ **0,71 xuống 0,19**.
+
+**Không có thứ tự nào "đúng tuyệt đối".** Áp sau CLAHE thì thiên vị M1/M2; áp
+trước CLAHE thì mô phỏng sát điều kiện triển khai hơn nhưng lại trừng phạt mô
+hình nhỏ ở độ phân giải thấp. Nhóm báo cáo **cả hai**, và nêu rõ phép đo chính
+(`robustness.csv`) dùng thứ tự "sau CLAHE".
+
+**★ Cổng tự kiểm — vì sao script này có ★**
+
+Lần thử đầu tiên tôi dựng lại đường ống SAI: resize ảnh gốc trực tiếp sang 224
+thay vì đi qua cache 48×48 rồi nội suy lên. Nhánh ảnh sạch cho accuracy **0,352**
+thay vì 0,99, nên mọi con số sau đó vô nghĩa — mà bảng kết quả in ra trông hoàn
+toàn bình thường, không có gì gợi ý là sai.
+
+Vì vậy script **bắt buộc** kiểm nhánh ảnh sạch khớp `robustness.csv` trong 0,02
+trước khi in bất cứ kết luận nào, lệch hơn thì `exit 1`. Lần chạy thật: lệch
+0,0062–0,0129 cho cả 5 mô hình — ĐẠT.
+
+---
+
+## 13. Các lỗi KHÁC NÊN BIẾT TRƯỚC (chưa gặp nhưng gần như chắc chắn sẽ gặp)
 
 | Triệu chứng | Nguyên nhân | Cách sửa |
 |---|---|---|

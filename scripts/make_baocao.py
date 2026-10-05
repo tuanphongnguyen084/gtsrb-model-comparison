@@ -180,6 +180,200 @@ def ket_luan_robustness() -> str:
     return "\n".join(dong)
 
 
+def _ty_so_toc_do() -> tuple[float, float] | None:
+    """(nhỏ nhất, lớn nhất) số lần M2 nhanh hơn các backbone mà nó ĐÁNH BẠI."""
+    sp, mc = read("speed.csv"), read("mcnemar.csv")
+    if sp is None or mc is None or "cpu_bs1_p50" not in sp.columns:
+        return None
+    lat = sp.set_index("model")["cpu_bs1_p50"].to_dict()
+    if "m2_vggres" not in lat:
+        return None
+    # Backbone nào M2 thắng CÓ ý nghĩa thống kê (theo McNemar, không tự chọn)
+    thua = set()
+    for r in mc.itertuples():
+        if r.better == "A" and r.model_a == "m2_vggres":
+            thua.add(r.model_b)
+        elif r.better == "B" and r.model_b == "m2_vggres":
+            thua.add(r.model_a)
+    ty = [lat[t] / lat["m2_vggres"] for t in thua
+          if t in lat and t.startswith("m3_")]
+    return (min(ty), max(ty)) if ty else None
+
+
+def ty_so_toc_do() -> str:
+    """Chuỗi 'nhanh hơn 15-76 lần', rút từ speed.csv + mcnemar.csv.
+
+    LỖI ĐÃ GẶP: con số này viết cứng là '13-68 lần', tính từ bảng latency CŨ.
+    Sau khi đo lại trên máy rảnh, số thật là 15-76 lần. Viết cứng một tỉ số
+    tính từ bảng số thì mỗi lần đo lại là một lần báo cáo nói sai mà không ai
+    biết — cùng loại với câu kết luận robustness ở ket_luan_robustness().
+    """
+    ty = _ty_so_toc_do()
+    return f"{ty[0]:.0f}–{ty[1]:.0f} lần" if ty else "(chưa có số latency)"
+
+
+def ms_tren_gflop() -> str:
+    """Chênh lệch ms/GFLOP giữa mô hình hiệu quả nhất và kém nhất."""
+    sp = read("speed.csv")
+    if sp is None or "flops_g" not in sp.columns or "cpu_bs1_p50" not in sp.columns:
+        return "(chưa có số)"
+    r = (sp["cpu_bs1_p50"] / sp["flops_g"]).dropna()
+    return f"{r.max() / r.min():.0f} lần" if len(r) > 1 else "(chưa có số)"
+
+
+def bang_seed_summary() -> str:
+    """Bảng mean/std/min/max, XOAY để đọc được.
+
+    seeds_summary.csv có cột MultiIndex (chỉ số × thống kê) nên để nguyên thì
+    ra bảng rộng 17 cột với tên kiểu `('top1', 'mean')` — không ai đọc nổi.
+    Xoay thành: mỗi DÒNG là một chỉ số, mỗi CỘT là một thống kê.
+    """
+    frame = read("seeds.csv")
+    if frame is None or frame.empty:
+        return MISSING
+    chi_so = [c for c in ("top1", "top5", "macro_f1", "ece") if c in frame.columns]
+    ra = []
+    for model, g in frame.groupby("model"):
+        bang = g[chi_so].agg(["mean", "std", "min", "max"]).T
+        bang["biên độ (điểm)"] = (bang["max"] - bang["min"]) * 100
+        bang.index.name = f"{model} ({len(g)} seed)"
+        ra.append(bang.round(5).to_markdown())
+    return "\n\n".join(ra)
+
+
+def ket_luan_seed() -> str:
+    """Nhiễu seed, và nó nói gì về các chênh lệch trong bảng chính.
+
+    Đây là phép đo ĐỘC LẬP với McNemar cho cùng một câu hỏi: chênh lệch bao
+    nhiêu điểm thì mới là thật?
+    """
+    frame, main = read("seeds.csv"), read_main()
+    if frame is None or frame.empty:
+        return MISSING + "  \nChạy `make seeds` rồi `python scripts/run_seeds.py --collect-only`."
+
+    dong = []
+
+    # Chỉ số nào nhiễu hơn? Rút từ dữ liệu, vì nó là cái GIÁ của việc chọn
+    # macro-F1 làm chỉ số chính — không nêu ra thì người đọc sẽ áp cùng một
+    # ngưỡng "đáng kể" cho cả hai chỉ số.
+    if {"top1", "macro_f1"} <= set(frame.columns):
+        for model, g in frame.groupby("model"):
+            if len(g) < 2:
+                continue
+            b1 = (g.top1.max() - g.top1.min()) * 100
+            bm = (g.macro_f1.max() - g.macro_f1.min()) * 100
+            if b1 > 0:
+                dong.append(
+                    f"**Macro-F1 nhiễu hơn top-1 {bm / b1:.0f} lần** qua các seed "
+                    f"của `{model}`: biên độ {bm:.2f} điểm so với {b1:.2f} điểm. "
+                    f"Hợp lý — macro-F1 cho mỗi lớp trọng số bằng nhau, nên nó "
+                    f"chịu trọn dao động ở các lớp thiểu số, đúng chỗ nhạy nhất "
+                    f"với seed. Đó là **cái giá** của việc chọn macro-F1 làm chỉ "
+                    f"số chính, và nghĩa là ngưỡng 'đáng kể' của macro-F1 phải "
+                    f"ĐẶT CAO HƠN ngưỡng của top-1, không dùng chung một mức.")
+    for model, g in frame.groupby("model"):
+        mf = g["macro_f1"]
+        bien = (mf.max() - mf.min()) * 100
+        dong.append(
+            f"`{model}` chạy **{len(g)} seed** ({', '.join(str(x) for x in sorted(g.seed))}): "
+            f"macro-F1 {mf.mean():.5f} ± {mf.std():.5f}, "
+            f"từ {mf.min():.5f} đến {mf.max():.5f} — **biên độ {bien:.2f} điểm**.")
+
+        if main is None:
+            continue
+        # Mô hình nào trong bảng chính nằm TRONG biên độ seed của model này?
+        base = main.set_index("model")["test_macro_f1"].to_dict()
+        if model not in base:
+            continue
+        trong = [f"`{k}` ({v:.5f})" for k, v in base.items()
+                 if k != model and mf.min() <= v <= mf.max()]
+        if trong:
+            dong.append(
+                f"\nTrong bảng so sánh chính, {', '.join(trong)} nằm **bên trong** "
+                f"biên độ seed của `{model}`. Nghĩa là chênh lệch với những mô "
+                f"hình đó **không phân biệt được khỏi việc đổi seed**.")
+        # Chỗ đảo thứ hạng THẬT: mô hình xếp TRÊN model này trong bảng chính,
+        # nhưng thấp hơn seed tốt nhất của nó. Liệt kê cả những mô hình mà
+        # model này vốn đã thắng thì không phải phát hiện gì.
+        cua_minh = base.get(model, mf.mean())
+        dao = [f"`{k}` ({v:.5f})" for k, v in base.items()
+               if k != model and v > cua_minh and v < mf.max()]
+        if dao:
+            dong.append(
+                f"\n★ Seed tốt nhất của `{model}` ({mf.max():.5f}) **vượt** "
+                f"{', '.join(dao)} — mô hình xếp TRÊN nó trong bảng chính. "
+                f"Thứ hạng giữa chúng **đảo theo seed**, nên không được trình "
+                f"bày như một xếp hạng cố định. Đây là phép đo ĐỘC LẬP dẫn tới "
+                f"cùng kết luận với McNemar.")
+    return "\n\n".join(dong)
+
+
+def bang_thu_tu_clahe() -> str:
+    """Bảng + kết luận về việc áp nhiễu TRƯỚC hay SAU CLAHE.
+
+    Rút từ reports/tables/thu_tu_clahe.csv. Đây là giới hạn phương pháp NẶNG
+    NHẤT của phần robustness, nên nó phải nằm trong báo cáo kèm số, không chỉ
+    là một câu chú thích.
+    """
+    frame = read("thu_tu_clahe.csv")
+    if frame is None:
+        return (MISSING + "  \nChạy `python scripts/kiem_thu_tu_clahe.py` "
+                "để sinh bảng này.")
+
+    chenh = (frame.pivot_table(index="model", columns="corruption",
+                               values="chenh", aggfunc="mean"))
+    chenh["trung bình"] = chenh.mean(axis=1)
+    chenh = chenh.sort_values("trung bình", ascending=False)
+
+    xep = {}
+    for cot, nhan in (("nhieu_SAU_clahe", "đang đo"),
+                      ("nhieu_TRUOC_clahe", "triển khai")):
+        xep[nhan] = frame.groupby("model")[cot].mean().sort_values(ascending=False)
+
+    cu, moi = xep["đang đo"], xep["triển khai"]
+    dong = ["**Chênh = (áp nhiễu TRƯỚC CLAHE) − (áp nhiễu SAU CLAHE).** "
+            "Dương nghĩa là sửa thứ tự giúp mô hình đó:", "",
+            chenh.round(3).to_markdown(), "",
+            "**Dấu của hiệu ứng phụ thuộc vào MÔ HÌNH** — không phải một sai số "
+            "chung cộng vào mọi mô hình như nhau. CLAHE cân bằng tương phản "
+            "**cục bộ**: áp nhiễu trước thì CLAHE *khuếch đại* chính cái nhiễu "
+            "đó, rồi ảnh bị thu về 48×48. Với mô hình nhỏ ở độ phân giải thấp, "
+            "nhiễu đã khuếch đại còn tệ hơn ảnh tối ban đầu; với mô hình 224px "
+            "thì việc lấy lại độ sáng tổng thể quan trọng hơn.", "",
+            "Thứ hạng độ bền theo hai thứ tự:", "",
+            "| | thứ tự ĐANG đo | thứ tự TRIỂN KHAI |", "|---|---|---|"]
+    for i in range(len(cu)):
+        dong.append(f"| {i+1} | `{cu.index[i]}` {cu.iloc[i]:.3f} "
+                    f"| `{moi.index[i]}` {moi.iloc[i]:.3f} |")
+
+    ben_cu, ben_moi = cu.index[0], moi.index[0]
+    khoang_cu = cu.iloc[0] - cu.iloc[1]
+    khoang_moi = moi.iloc[0] - moi.iloc[1]
+    bien_cu, bien_moi = cu.iloc[0] - cu.iloc[-1], moi.iloc[0] - moi.iloc[-1]
+
+    dong += ["", "**Ba điều phải nói cùng nhau, không được lẫn:**", ""]
+    if ben_cu == ben_moi:
+        dong.append(f"1. Mô hình bền nhất **không đổi** (`{ben_cu}`) ở cả hai "
+                    f"thứ tự — kết luận chính vẫn đứng.")
+    else:
+        dong.append(f"1. Mô hình bền nhất **ĐỔI**: `{ben_cu}` theo thứ tự đang "
+                    f"đo, nhưng `{ben_moi}` theo thứ tự triển khai.")
+    dong.append(f"2. Nhưng khoảng cách hạng 1 với hạng 2 **co từ "
+                f"{khoang_cu:.3f} xuống {khoang_moi:.3f}** — hai mô hình đầu "
+                f"gần như bằng nhau về độ bền. Nói '{ben_moi} bền nhất' mà "
+                f"không nói con số này là phóng đại.")
+    dong.append(f"3. Biên độ giữa {len(cu)} mô hình co từ **{bien_cu:.2f} xuống "
+                f"{bien_moi:.2f}**. Những con số thấp dưới mức đoán bừa "
+                f"(1/43 = 0,023) trong bảng robustness chính là **hiện vật "
+                f"đo**, không phải tính chất mô hình.")
+    dong += ["", "**Không có thứ tự nào đúng tuyệt đối.** Áp sau CLAHE thiên vị "
+             "mô hình nhỏ ở 48px; áp trước CLAHE sát điều kiện triển khai hơn "
+             "nhưng trừng phạt chính nhóm đó. Phép đo chính trong "
+             "`robustness.csv` dùng thứ tự **sau CLAHE**; bảng trên là phép đo "
+             "đối chứng. Chi tiết ở `docs/SU_CO.md` §12."]
+    return "\n".join(dong)
+
+
 def ket_luan_robustness_ngan() -> str:
     """Một dòng cho mục 'kết quả chính' ở đầu và cuối báo cáo.
 
@@ -293,8 +487,8 @@ thì nên chọn mô hình nào.
 **Ba kết quả chính, đều đi ngược kỳ vọng thông thường:**
 
 1. Mô hình **tự xây 1,24 M tham số đánh bại hai backbone pretrained ImageNet** với ý nghĩa
-   thống kê (p < 1e-6), trong khi nhanh hơn 13–68 lần.
-2. **Latency không tỉ lệ với FLOPs**, chênh tới **64 lần** về hiệu quả trên mỗi GFLOP.
+   thống kê (p < 1e-6), trong khi nhanh hơn {ty_so_toc_do()}.
+2. **Latency không tỉ lệ với FLOPs**, chênh tới **{ms_tren_gflop()}** về hiệu quả trên mỗi GFLOP.
    Mô hình tên "EfficientNet" lại là mô hình **chậm nhất** trong cả {f['n_models']}.
 3. {ket_luan_robustness_ngan()} trước nhiễu thực tế.
 
@@ -474,6 +668,20 @@ Bảng `relative robustness` = accuracy dưới nhiễu / accuracy trên ảnh s
 sánh được (phép toán theo từng pixel hoặc theo % diện tích), và kết luận chỉ rút từ chúng.
 Hướng sửa triệt để: đổi kernel sang tỉ lệ % chiều rộng ảnh.
 
+#### 3.5.1 Giới hạn NẶNG hơn: nhiễu được áp SAU bước CLAHE
+
+{bang_thu_tu_clahe()}
+
+### 3.5.2 Nhiễu seed — chênh lệch bao nhiêu điểm thì mới là THẬT?
+
+Cùng một cấu hình, chỉ đổi seed khởi tạo. Đây là phép đo **độc lập** với McNemar
+cho cùng một câu hỏi, và quan trọng hơn mọi con số accuracy lẻ trong báo cáo: nó
+cho biết **ngưỡng dưới** của những gì đáng kết luận.
+
+{ket_luan_seed()}
+
+{bang_seed_summary()}
+
 ### 3.6 Tốc độ suy luận và triển khai biên
 
 Đo đúng quy trình: 20 vòng warm-up, **đồng bộ thiết bị trước và sau khi bấm giờ** (GPU
@@ -484,7 +692,7 @@ chạy bất đồng bộ — không đồng bộ thì đang đo thời gian *g�
 
 {table_efficiency()}
 
-Nếu latency tỉ lệ FLOPs thì cột cuối phải bằng nhau — thực tế chênh **64 lần**.
+Nếu latency tỉ lệ FLOPs thì cột cuối phải bằng nhau — thực tế chênh **{ms_tren_gflop()}**.
 EfficientNet-B0 có **ít hơn ResNet18 4,4 lần FLOPs** nhưng chậm hơn **14 lần** trên CPU.
 Nguyên nhân: MBConv + squeeze-excitation gồm rất nhiều lớp **mảnh**, mỗi lớp tốn chi phí
 cố định (launch kernel, truy cập bộ nhớ) mà làm rất ít phép tính → bị chặn bởi **băng
@@ -537,7 +745,8 @@ nghĩa thống kê* là lựa chọn tồi trên hệ thống thời gian thực
 3. **Mức độ nhiễu không so sánh được giữa các độ phân giải** đối với motion blur (mục 3.5).
 4. **So sánh M2 với M3 lẫn hai biến** (pretrained hay không, và 48 hay 224 px). Ablation
    độ phân giải là bước cần thiết để tách chúng — đã chuẩn bị nhưng chưa chạy.
-5. **Mỗi cấu hình chỉ chạy một seed.** Chênh lệch nhỏ hơn độ nhiễu seed không nên kết luận.
+5. **Chỉ M2 được chạy nhiều seed** (3 seed); bốn mô hình còn lại một seed. Biên độ seed đo
+   được của M2 dùng làm thước đo nhiễu cho cả bảng, nhưng đó là phép ngoại suy.
 6. **Chưa kiểm adversarial robustness** (FGSM/PGD) — khác bản chất với nhiễu tự nhiên.
 
 ---
@@ -548,9 +757,9 @@ Trên một bộ dữ liệu đã bão hoà, việc đua accuracy không còn l�
 của báo cáo này nằm ở ba kết luận chỉ rút ra được khi **đo cẩn thận và kiểm định**:
 
 1. Một CNN **tự xây 1,24 M tham số** vượt hai backbone pretrained ImageNet có ý nghĩa thống
-   kê, trong khi nhanh hơn 13–68 lần — vì miền đích có độ phân giải quá thấp để lợi thế
+   kê, trong khi nhanh hơn {ty_so_toc_do()} — vì miền đích có độ phân giải quá thấp để lợi thế
    pretrained phát huy.
-2. **Latency chênh 64 lần so với dự đoán từ FLOPs.** Chọn mô hình theo FLOPs sẽ chọn đúng
+2. **Latency chênh {ms_tren_gflop()} so với dự đoán từ FLOPs.** Chọn mô hình theo FLOPs sẽ chọn đúng
    mô hình chậm nhất.
 3. {ket_luan_robustness_ngan()} — và mô hình chính xác nhất cũng không phải mô hình
    nên triển khai.

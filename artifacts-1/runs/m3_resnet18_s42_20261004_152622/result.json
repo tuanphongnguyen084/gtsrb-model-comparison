@@ -1,0 +1,40 @@
+{
+  "run_id": "m3_resnet18_s42_20261004_152622",
+  "model": "m3_resnet18",
+  "seed": 42,
+  "git_commit": "f6ddb93",
+  "config_path": "configs/m3_resnet18.yaml",
+  "data": {
+    "img_size": 224,
+    "preprocess": "clahe",
+    "aug_policy": "geo_photo",
+    "normalize": "imagenet",
+    "split_group_by_track": true,
+    "n_train": 31379,
+    "n_val": 7830,
+    "n_test": 12630
+  },
+  "train": {
+    "epochs_run": 15,
+    "best_epoch": 10,
+    "label_smoothing": 0.1,
+    "optimizer": "adamw",
+    "lr": 0.001,
+    "scheduler": "cosine",
+    "batch_size": 96,
+    "train_seconds": 1978.7,
+    "train_seconds_clean": 1971.8,
+    "train_seconds_suspect": false,
+    "train_time_note": "",
+    "device": "cuda",
+    "amp": true
+  },
+  "val": {
+    "top1": 0.994253,
+    "best_macro_f1": 0.9499645160086927
+  },
+  "test": null,
+  "cost": null,
+  "ckpt_path": "artifacts/runs/m3_resnet18_s42_20261004_152622/best.pt",
+  "notes": ""
+}

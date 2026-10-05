@@ -11,7 +11,10 @@ DANG=$(tail -40 logs/ablation_local.log 2>/dev/null | grep "| RUN " | tail -1 | 
 EP=$(tail -5 logs/ablation_local.log 2>/dev/null | grep -oE "epoch +[0-9]+/[0-9]+" | tail -1)
 
 printf "\n  ABLATION  %2d/30 run xong" "$XONG"
-(( XONG > 0 )) && printf "   [%s%s]" "$(printf '#%.0s' $(seq 1 $XONG))" "$(printf '.%.0s' $(seq 1 $((30-XONG))))"
+CON=$((30-XONG))
+(( XONG > 0 )) && printf "   [%s%s]" \
+  "$(printf '#%.0s' $(seq 1 $XONG))" \
+  "$( (( CON > 0 )) && printf '.%.0s' $(seq 1 $CON) )"
 printf "\n  SEED      %2d/2 run xong\n" "$SEED"
 [[ -n "$DANG" ]] && printf "\n  đang chạy  %s\n             %s\n" "$DANG" "$EP"
 

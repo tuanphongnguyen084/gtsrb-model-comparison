@@ -139,8 +139,12 @@ def main() -> None:
         # để lại gì (xem docs/SU_CO.md).
         partial = Path(args.out)
         partial.parent.mkdir(parents=True, exist_ok=True)
-        pd.concat(all_frames, ignore_index=True).to_csv(partial, index=False)
-        log.info("  đã ghi tạm %s (%d/%d model)", partial, len(all_frames), len(run_dirs))
+        gop = pd.concat(all_frames, ignore_index=True)
+        gop.to_csv(partial, index=False)
+        # Đếm MODEL, không đếm frame: all_frames[0] là cả bảng cũ (nhiều model),
+        # nên len(all_frames) báo "2/5" khi thực ra đã có 4 model trong file.
+        log.info("  đã ghi tạm %s (%d/%d model)",
+                 partial, gop["run_id"].nunique(), len(run_dirs))
 
         free_memory(model, device)
 
