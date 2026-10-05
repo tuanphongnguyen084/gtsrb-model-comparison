@@ -258,8 +258,19 @@ def already_done(job: dict) -> Path | None:
     Nhận diện bằng tag `<trục>-<giá trị>` nằm trong tên run, và có result.json
     (có result.json = fit() đã chạy xong).
     """
+    # ★ PHẢI có TÊN MODEL trong mẫu khớp. Tag một mình là KHÔNG ĐỦ.
+    #
+    # LỖI ĐÃ GẶP THẬT — hỏng cả trục `resolution`: trục này so NHIỀU model ở
+    # cùng một độ phân giải, nên job 1 (m1_lenet @32px) và job 2 (m2_vggres
+    # @32px) có CÙNG tag `resolution-res32-budget`. Khớp bằng `*{marker}*` nên
+    # sau khi M1 xong, M2 bị coi là "đã chạy xong" và BỎ QUA. Mất 4 job:
+    # m2@32, m2@48, m2@64 và resnet18@64 (trùng tag res64 với m1@64).
+    #
+    # Hậu quả: trục resolution chỉ còn 5/9 run và KHÔNG so được M1 với M2 nữa
+    # — đúng câu hỏi mà nó được dựng ra để trả lời. Mẻ vẫn báo "mã thoát 0".
+    model = Path(job["config"]).stem
     marker = f"{job['axis']}-{job['tag']}"
-    for run_dir in sorted(Path("artifacts/runs").glob(f"*{marker}*")):
+    for run_dir in sorted(Path("artifacts/runs").glob(f"{model}_s*_{marker}*")):
         if (run_dir / "result.json").exists():
             return run_dir
     return None
