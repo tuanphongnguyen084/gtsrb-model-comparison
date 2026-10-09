@@ -1,0 +1,3 @@
+nhánh,cách split,track dùng chung,val_macro_f1,test_top1,test_macro_f1,run_id
+A_random,random theo ảnh,1306,0.9989755841277194,0.987094,0.98209,m1_lenet_s42_leak-A_random_20261004_223054
+B_track,theo track,0,0.9880947642371644,0.984561,0.977792,m1_lenet_s42_leak-B_track_20261004_224309

@@ -1,0 +1,5 @@
+layer,type,params,percent
+classifier.1,Linear,2359552,97.32924857866129
+features.3,Conv2d,51264,2.114590650740688
+classifier.4,Linear,11051,0.45584311176137926
+features.0,Conv2d,2432,0.1003176588366369

@@ -1,0 +1,11 @@
+true_id,true_name,pred_id,pred_name,count
+3,Giới hạn 60 km/h,5,Giới hạn 80 km/h,17
+6,Hết giới hạn 80 km/h,5,Giới hạn 80 km/h,8
+27,Người đi bộ,11,Ưu tiên ở giao lộ kế tiếp,7
+27,Người đi bộ,23,Đường trơn,7
+11,Ưu tiên ở giao lộ kế tiếp,23,Đường trơn,6
+6,Hết giới hạn 80 km/h,41,Hết cấm vượt,5
+10,"Cấm vượt (xe trên 3,5 tấn)",9,Cấm vượt,5
+18,Cảnh báo chung,27,Người đi bộ,5
+22,Đường xấu,25,Đang thi công,5
+27,Người đi bộ,28,Trẻ em qua đường,4

@@ -14,11 +14,23 @@ logs/
 *.pth
 *.onnx
 
-# Kết quả sinh ra tự động (trừ bảng/hình cuối cùng đưa vào báo cáo)
-reports/figures/*.png
-!reports/figures/.gitkeep
-reports/tables/*.csv
-!reports/tables/.gitkeep
+# Bảng và hình CÓ commit — 140 KB + 16 MB.
+#
+# VÌ SAO: trước đây hai dòng dưới chặn chúng, nên ai clone repo về chỉ thấy code
+# và BAO_CAO.md, KHÔNG thấy 37 hình (Grad-CAM, đường cong robustness, Pareto,
+# 6 hình ablation) và KHÔNG có số thô để tự kiểm. Mà notebook thì cũng không
+# chạy được vì artifacts/runs/ và data/ đều không commit -> notebook vô dụng
+# với người clone. Đẩy bảng + hình lên là cách rẻ nhất để họ xem được kết quả.
+#
+#   reports/figures/*.png     <- ĐÃ BỎ chặn
+#   reports/tables/*.csv      <- ĐÃ BỎ chặn
+#
+# Vẫn chặn file tạm và backup — chúng chứa số LỖI THỜI. Một file
+# .robustness_stale_500samples.csv.bak từng lọt vào repo vì .gitignore chỉ
+# chặn đuôi .csv, mà tên nó kết thúc bằng .bak.
+reports/**/*.bak
+reports/**/*.tmp
+reports/**/*.partial.csv
 
 # Python
 __pycache__/

@@ -1,0 +1,11 @@
+model_a,model_b,n00,n01,n10,n11,n_discordant,statistic,p_value,method,better,verdict
+m1_lenet,m2_vggres,12400,35,136,59,171,58.47953216374269,2.054168937435056e-14,chi2_corrected,B,"Model B tốt hơn CÓ ý nghĩa thống kê (p=2.054e-14 < 0,05). B đúng riêng 136 ảnh, A đúng riêng 35 ảnh."
+m1_lenet,m3_effnetb0,12352,83,122,73,205,7.04390243902439,0.007953554747067552,chi2_corrected,B,"Model B tốt hơn CÓ ý nghĩa thống kê (p=0.007954 < 0,05). B đúng riêng 122 ảnh, A đúng riêng 83 ảnh."
+m1_lenet,m3_mobilenetv2,12346,89,124,71,213,5.427230046948357,0.019825100824565636,chi2_corrected,B,"Model B tốt hơn CÓ ý nghĩa thống kê (p=0.01983 < 0,05). B đúng riêng 124 ảnh, A đúng riêng 89 ảnh."
+m1_lenet,m3_resnet18,12394,41,151,44,192,61.880208333333336,3.64999760855939e-15,chi2_corrected,B,"Model B tốt hơn CÓ ý nghĩa thống kê (p=3.65e-15 < 0,05). B đúng riêng 151 ảnh, A đúng riêng 41 ảnh."
+m2_vggres,m3_effnetb0,12430,106,44,50,150,24.80666666666667,6.337789150726583e-07,chi2_corrected,A,"Model A tốt hơn CÓ ý nghĩa thống kê (p=6.338e-07 < 0,05). A đúng riêng 106 ảnh, B đúng riêng 44 ảnh."
+m2_vggres,m3_mobilenetv2,12421,115,49,45,164,25.76219512195122,3.8617912908815485e-07,chi2_corrected,A,"Model A tốt hơn CÓ ý nghĩa thống kê (p=3.862e-07 < 0,05). A đúng riêng 115 ảnh, B đúng riêng 49 ảnh."
+m2_vggres,m3_resnet18,12485,51,60,34,111,0.5765765765765766,0.44765733086275317,chi2_corrected,tie,"Chênh lệch KHÔNG có ý nghĩa thống kê (p=0.4477 >= 0,05). Hai model coi như tương đương về accuracy; nên chọn dựa vào tốc độ và robustness."
+m3_effnetb0,m3_mobilenetv2,12406,68,64,92,132,0.06818181818181818,0.794002680192762,chi2_corrected,tie,"Chênh lệch KHÔNG có ý nghĩa thống kê (p=0.7940 >= 0,05). Hai model coi như tương đương về accuracy; nên chọn dựa vào tốc độ và robustness."
+m3_effnetb0,m3_resnet18,12456,18,89,67,107,45.794392523364486,1.3133896652739187e-11,chi2_corrected,B,"Model B tốt hơn CÓ ý nghĩa thống kê (p=1.313e-11 < 0,05). B đúng riêng 89 ảnh, A đúng riêng 18 ảnh."
+m3_mobilenetv2,m3_resnet18,12445,25,100,60,125,43.808,3.6222140085907476e-11,chi2_corrected,B,"Model B tốt hơn CÓ ý nghĩa thống kê (p=3.622e-11 < 0,05). B đúng riêng 100 ảnh, A đúng riêng 25 ảnh."
