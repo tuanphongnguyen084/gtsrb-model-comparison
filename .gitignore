@@ -2,6 +2,13 @@
 data/raw/
 data/processed/
 artifacts/
+# Bắt cả biến thể tên do giải nén trùng chỗ: artifacts-1, artifacts (1), artifacts_old...
+# LỖI ĐÃ GẶP: giải nén m3_runs.zip khi artifacts/ đã tồn tại -> thành artifacts-1/,
+# và 9 file result.json của 3 run Colab ĐÃ BỊ LOẠI lọt vào repo. Dòng "artifacts/"
+# có dấu / nên chỉ chặn đúng tên đó.
+artifacts-*/
+artifacts\ */
+artifacts_*/
 
 # Log của các lần chạy — mỗi máy một khác, không ai cần log của người khác
 logs/

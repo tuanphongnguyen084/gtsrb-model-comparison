@@ -171,7 +171,7 @@ src/gtsrb/          thư viện dùng chung — mỗi file ghi CHỦ ở đầu 
 
 scripts/            CLI, mỗi việc một lệnh (_common.py gom logic dùng chung)
 configs/            YAML — MỌI siêu tham số ở đây, không hard-code
-notebooks/          00 = train trên Colab · 01..09 = mỗi người một notebook
+notebooks/          00 = train trên Colab (phương án dự phòng, không dùng cho số trong báo cáo)
 tests/              109 test; đặc biệt test_split.py chặn rò rỉ dữ liệu
 docs/               phân công, interface, lý thuyết, Q&A, sự cố, kết quả
 reports/            bảng + hình cho báo cáo
@@ -200,6 +200,7 @@ Chi tiết đầy đủ: [docs/BAO_CAO.md](docs/BAO_CAO.md) mục 5.
 2. **Mọi siêu tham số trong YAML.** Không hard-code trong `src/`.
 3. **Không chép số bằng tay** vào báo cáo. Mọi số truy được về một `result.json`.
 4. **`make test` phải xanh trước khi push.**
-5. **Mỗi người một notebook.** `.ipynb` là JSON, merge rất khó — cài `nbstripout`.
+5. **Không làm việc trong notebook.** `.ipynb` là JSON, merge rất khó. Code đi vào
+   `src/gtsrb/` và `scripts/`; notebook chỉ còn `00` để chạy trên Colab.
 6. **Gặp lỗi lạ → ghi 1 dòng vào [docs/SU_CO.md](docs/SU_CO.md)** để cả nhóm không mất
    thời gian hai lần.

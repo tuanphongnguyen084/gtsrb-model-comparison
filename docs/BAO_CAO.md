@@ -1,6 +1,6 @@
 # Phân loại biển báo giao thông GTSRB: so sánh ba hướng tiếp cận Deep Learning
 
-**Môn**: Deep Learning · **Ngày**: 05/10/2026
+**Môn**: Deep Learning · **Ngày**: 09/10/2026
 **Nhóm**: Phong Nguyễn · Hoàng · Phong Trần · Huy
 
 > Bảng số trong báo cáo này được **sinh tự động** từ `reports/tables/` bằng
@@ -626,5 +626,5 @@ Mỗi file mã nguồn ghi rõ `CHỦ: <tên>` ở đầu docstring.
 | `docs/INTERFACE.md` | hợp đồng giữa các phần: chữ ký hàm, schema `result.json` (276 dòng) |
 | `reports/tables/` | **26 bảng CSV** |
 | `reports/figures/` | **37 hình** |
-| `notebooks/` | **10 notebook** (01–09 diễn giải từng bước, 00 để chạy trên Colab) |
+| `notebooks/` | **1 notebook** (01–09 diễn giải từng bước, 00 để chạy trên Colab) |
 | `tests/` | **16 file test**, chạy bằng `make test` |
