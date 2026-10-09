@@ -396,8 +396,9 @@ def phu_luc_tai_lieu() -> str:
     dong += [
         f"| `reports/tables/` | **{dem('reports/tables/*.csv')} bảng CSV** |",
         f"| `reports/figures/` | **{dem('reports/figures/*.png')} hình** |",
-        f"| `notebooks/` | **{dem('notebooks/*.ipynb')} notebook** "
-        f"(01–09 diễn giải từng bước, 00 để chạy trên Colab) |",
+                f"| `notebooks/` | **{dem('notebooks/*.ipynb')} notebook** "
+        f"— `00_colab_train` ch\u1ea1y tr\u00ean GPU Colab, l\u00e0 ph\u01b0\u01a1ng \u00e1n t\u00e1i l\u1eadp d\u1ef1 ph\u00f2ng; "
+        f"m\u1ecdi s\u1ed1 trong b\u00e1o c\u00e1o \u0111\u1ec1u t\u1eeb m\u00e1y local |",
         f"| `tests/` | **{dem('tests/test_*.py')} file test**, chạy bằng `make test` |",
     ]
     return "\n".join(dong)

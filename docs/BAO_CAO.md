@@ -626,5 +626,5 @@ Mỗi file mã nguồn ghi rõ `CHỦ: <tên>` ở đầu docstring.
 | `docs/INTERFACE.md` | hợp đồng giữa các phần: chữ ký hàm, schema `result.json` (276 dòng) |
 | `reports/tables/` | **26 bảng CSV** |
 | `reports/figures/` | **37 hình** |
-| `notebooks/` | **1 notebook** (01–09 diễn giải từng bước, 00 để chạy trên Colab) |
+| `notebooks/` | **1 notebook** — `00_colab_train` chạy trên GPU Colab, là phương án tái lập dự phòng; mọi số trong báo cáo đều từ máy local |
 | `tests/` | **16 file test**, chạy bằng `make test` |
