@@ -1,43 +1,20 @@
-# Dữ liệu và checkpoint — KHÔNG commit (nặng hàng GB)
+# Dữ liệu — nặng hàng trăm MB, tải lại bằng: python preprocess.py --download
 data/raw/
 data/processed/
-artifacts/
-# Bắt cả biến thể tên do giải nén trùng chỗ: artifacts-1, artifacts (1), artifacts_old...
-# LỖI ĐÃ GẶP: giải nén m3_runs.zip khi artifacts/ đã tồn tại -> thành artifacts-1/,
-# và 9 file result.json của 3 run Colab ĐÃ BỊ LOẠI lọt vào repo. Dòng "artifacts/"
-# có dấu / nên chỉ chặn đúng tên đó.
-artifacts-*/
-artifacts\ */
-artifacts_*/
 
-# Log của các lần chạy — mỗi máy một khác, không ai cần log của người khác
-logs/
-
-# Mọi file nén — đều là thứ sinh lại được hoặc tải về được, không commit.
-# Trước đây chỉ chặn đúng tên gtsrb_code.zip, nên m3_runs.zip (62 MB kết quả
-# tải từ Colab) lọt qua và nằm trong dự án mà không ai để ý.
-*.zip
+# Checkpoint — tài sản LOCAL, không commit (81 MB). Lấy lại bằng cách train
+# (python train_m1.py ...) hoặc xin file .pt từ thành viên đã train.
 *.pt
 *.pth
 *.onnx
 
-# Bảng và hình CÓ commit — 140 KB + 16 MB.
-#
-# VÌ SAO: trước đây hai dòng dưới chặn chúng, nên ai clone repo về chỉ thấy code
-# và BAO_CAO.md, KHÔNG thấy 37 hình (Grad-CAM, đường cong robustness, Pareto,
-# 6 hình ablation) và KHÔNG có số thô để tự kiểm. Mà notebook thì cũng không
-# chạy được vì artifacts/runs/ và data/ đều không commit -> notebook vô dụng
-# với người clone. Đẩy bảng + hình lên là cách rẻ nhất để họ xem được kết quả.
-#
-#   reports/figures/*.png     <- ĐÃ BỎ chặn
-#   reports/tables/*.csv      <- ĐÃ BỎ chặn
-#
-# Vẫn chặn file tạm và backup — chúng chứa số LỖI THỜI. Một file
-# .robustness_stale_500samples.csv.bak từng lọt vào repo vì .gitignore chỉ
-# chặn đuôi .csv, mà tên nó kết thúc bằng .bak.
-reports/**/*.bak
-reports/**/*.tmp
-reports/**/*.partial.csv
+# File nén và backup — sinh lại / tải lại được, hoặc chứa số lỗi thời
+*.zip
+results/**/*.bak
+results/**/*.tmp
+
+# Log
+logs/
 
 # Python
 __pycache__/
@@ -46,8 +23,6 @@ __pycache__/
 venv/
 *.egg-info/
 .pytest_cache/
-
-# Notebook — output đã bị nbstripout xoá, nhưng phòng xa
 .ipynb_checkpoints/
 
 # Hệ điều hành / IDE
