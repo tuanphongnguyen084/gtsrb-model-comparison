@@ -12,7 +12,8 @@ KIẾN TRÚC (4 stage, đầu vào 48x48):
     Stage 4   ResBlock(128->256)-> MaxPool -> Dropout2d(0.3)   (B,256,3,3)
     Head      GAP -> Dropout(0.5) -> Linear(256->43)
 
-★ NĂM LỰA CHỌN THIẾT KẾ:
+NĂM LỰA CHỌN THIẾT KẾ:
+
 1) Hai conv 3x3 thay một conv 5x5: cùng receptive field nhưng ít tham số hơn 28%
    và có 2 tầng phi tuyến -> biểu diễn mạnh hơn (luận điểm VGG).
 2) BatchNorm giữa Conv và ReLU: làm mượt bề mặt loss -> dùng được lr lớn hơn.

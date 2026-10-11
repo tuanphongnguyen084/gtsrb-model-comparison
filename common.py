@@ -6,9 +6,6 @@ Chỉ chứa thứ KHÔNG phải logic deep learning cốt lõi: hằng số, đ
 huấn luyện của mỗi mô hình nằm trọn trong file train_mX.py tương ứng, để đọc
 một file là thấy trọn kiến trúc + cách train của mô hình đó.
 
-Vì sao tách ra đây: nếu chép Dataset + hàm metrics vào cả 4 file thì sửa một
-chỗ phải sửa 4 lần, và ba model rất dễ nhận đầu vào khác nhau -> so sánh mất ý
-nghĩa. Một bản dữ liệu duy nhất đi qua đây đảm bảo 3 model so sánh công bằng.
 """
 from __future__ import annotations
 

@@ -11,11 +11,11 @@ KIẾN TRÚC (2 block Conv-Pool + 2 Dense):
     Linear(9216->256) + ReLU + Dropout        <- 2.359.552 tham số = 97,3% CẢ MODEL
     Linear(256->43)                           -> (B,43)
 
-★ M1 CỐ Ý KHÔNG có BatchNorm / residual / spatial dropout. Nó là MỐC: mọi điểm
+*M1 CỐ Ý KHÔNG có BatchNorm / residual / spatial dropout. Nó là MỐC: mọi điểm
 accuracy M2 hơn M1 phải quy được về một thành phần cụ thể. "Tinh chỉnh M1 cho
 mạnh" là mất ý nghĩa đó.
 
-★ BÀI HỌC CHÍNH: in bảng đếm tham số ra sẽ thấy 97,3% nằm ở MỘT lớp Linear
+KẾT LUẬN : in bảng đếm tham số ra sẽ thấy 97,3% nằm ở MỘT lớp Linear
 (9216 x 256). Đó là lý do mọi kiến trúc hiện đại (ResNet, MobileNet, EfficientNet,
 và M2) bỏ Flatten+FC, dùng Global Average Pooling (xem train_m2.py).
 """

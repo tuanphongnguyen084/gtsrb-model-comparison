@@ -10,7 +10,8 @@ lớp cuối), còn Dataset 224x224, chuẩn hoá ImageNet và quy trình train 
 giống hệt. Đặt chung giúp thấy rõ tương phản 3 triết lý: ResNet (conv dày đặc),
 MobileNetV2 (depthwise separable), EfficientNet-B0 (compound scaling + SE).
 
-★ BỐN ĐIỂM CỐT LÕI:
+BỐN ĐIỂM CỐT LÕI:
+
 1) Transfer learning hiệu quả vì CNN học theo tầng: tầng đầu (cạnh/màu) PHỔ QUÁT
    cho mọi ảnh, học từ 1,28 triệu ảnh ImageNet — thứ 39 nghìn ảnh GTSRB không học
    nổi. Chỉ tầng cuối (ngữ nghĩa) phải thay.

@@ -10,7 +10,7 @@ Chạy MỘT LẦN trước khi train:
     index.csv                 nguồn sự thật: path, class_id, track_id, ROI, split
     images_48_clahe.npy       mảng (N, 48, 48, 3) uint8 — cache để train nhanh
 
-★ VÌ SAO CÁC BƯỚC NHƯ VẬY — phần kiến thức cốt lõi:
+Kiến thức cốt lõi:
 
 1. CROP ROI lề 10%: cắt sát mất viền biển báo (viền đỏ của biển cấm là đặc trưng
    quan trọng); nới 10% vẫn bỏ được phần lớn nền trời/đường vô nghĩa.

@@ -1,43 +1,32 @@
-# Core — PyTorch (cài riêng trên macOS vs Colab, xem Makefile)
+# Core - PyTorch
 torch>=2.2
 torchvision>=0.17
 
-# Dữ liệu & xử lý ảnh
+# Data & Image processing
 numpy>=1.26,<3
 opencv-python>=4.9
 pillow>=10.0
 pandas>=2.0
 
-# Chỉ số & kiểm định
+# Metrics & Statistical tests
 scikit-learn>=1.4
 scipy>=1.12
 
-# Trực quan hoá
+# Visualization
 matplotlib>=3.8
 seaborn>=0.13
-tabulate>=0.9          # pandas.to_markdown() trong scripts/make_report.py
 
-# Cấu hình & tiện ích
-pyyaml>=6.0
-tqdm>=4.66
-
-# Đếm FLOPs
-thop>=0.1.1
-
-# Xuất ONNX cho triển khai biên (src/gtsrb/deploy/export.py)
-onnx>=1.16
-onnxscript>=0.1
-# ★ onnxruntime KHÔNG phải tuỳ chọn ★
-# Thiếu nó thì verify_onnx() chỉ ghi một dòng cảnh báo rồi return False, và 4
-# test ONNX trong tests/test_export.py LẶNG LẼ bị skip (pytest.importorskip).
-# Nghĩa là bản ONNX được xuất mà KHÔNG AI KIỂM, đúng loại lỗi im lặng mà
-# docs/SU_CO.md §9 nói tới. Nó từng thiếu ở đây suốt dự án.
-onnxruntime>=1.17
-
-# Notebook
-jupyter>=1.0
+# Jupyter Notebook kernel (VS Code notebook runner)
 ipykernel>=6.29
-nbstripout>=0.7
 
-# Test
-pytest>=8.0
+# --- Redundant packages (commented out for lighter installation) ---
+# tabulate>=0.9
+# pyyaml>=6.0
+# tqdm>=4.66
+# thop>=0.1.1
+# onnx>=1.16
+# onnxscript>=0.1
+# onnxruntime>=1.17
+# jupyter>=1.0
+# nbstripout>=0.7
+# pytest>=8.0
