@@ -5,11 +5,6 @@ train_m3.py — M3 Transfer learning từ 3 backbone pretrained ImageNet.
 
 Lưu checkpoints/m3_<backbone>_best.pt.
 
-GỘP 3 BACKBONE VÀO 1 FILE vì phần model chỉ khác ~3 dòng (nạp backbone + thay
-lớp cuối), còn Dataset 224x224, chuẩn hoá ImageNet và quy trình train 2 pha thì
-giống hệt. Đặt chung giúp thấy rõ tương phản 3 triết lý: ResNet (conv dày đặc),
-MobileNetV2 (depthwise separable), EfficientNet-B0 (compound scaling + SE).
-
 BỐN ĐIỂM CỐT LÕI:
 
 1) Transfer learning hiệu quả vì CNN học theo tầng: tầng đầu (cạnh/màu) PHỔ QUÁT

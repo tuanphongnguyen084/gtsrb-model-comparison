@@ -1,4 +1,0 @@
-# TUYỆT ĐỐI KHÔNG pip install torch / torchvision trên Colab
-# Các gói Colab đã có sẵn, không cần cài lại
-
-thop>=0.1.1
